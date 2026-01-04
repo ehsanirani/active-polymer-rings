@@ -40,7 +40,7 @@ Larger values increase computational cost but allow studying longer-wavelength f
 
 **`--n-active`** (default: 0) — *Single ring only*
 Number of active (self-propelled) monomers. Range: 0 to `--n-monomers`.
-- `0`: Purely thermal (equilibrium) polymer
+- `0`: Purely passive polymer
 - `10-50`: Partially active system with mixed dynamics
 - Equal to `--n-monomers`: Fully active ring
 
@@ -62,29 +62,22 @@ Can differ from `--n-active-1` to create heterogeneous activity patterns.
 
 **`--fact`** (default: 1.0) — *Dimensionless*
 Active force magnitude applied to active monomers along their local tangent direction.
-Typical range: 0.1-10.0. Higher values drive the system further from thermal equilibrium.
 The ratio `fact/KT` determines whether activity or thermal fluctuations dominate dynamics.
 
 **`--kangle`** (default: 0.0) — *Energy units*
 Angle bending rigidity constant. Controls polymer stiffness via a cosine angle potential.
-- `0.0`: Freely jointed chain (flexible polymer)
-- `1.0-5.0`: Semi-flexible polymer (DNA-like)
-- `>10.0`: Stiff rod-like behavior
-
-Note: When `kangle > 0`, the system uses explicit angle potentials. When `kangle = 0`, tangent forces drive activity.
 
 **`--kbond`** (default: 30.0) — *Energy units*
 Bond spring constant for FENE (finitely extensible nonlinear elastic) bonds connecting monomers.
-Typical range: 10-100. Higher values create stiffer bonds. Rarely needs adjustment from default.
 
 **`--KT`** (default: 1.0) — *Energy units*
 Thermal energy (temperature). All other energies are measured relative to this value.
-Typical range: 0.1-10.0. Increasing `KT` enhances thermal fluctuations.
+Increasing `KT` enhances thermal fluctuations.
 Key ratio: `fact/KT` determines the balance between active forcing and thermal noise.
 
 **`--gamma`** (default: 2.0) — *Inverse time units*
 Damping coefficient (friction) for Langevin dynamics.
-Typical range: 0.5-5.0. Controls momentum relaxation timescales and affects dynamics at short times.
+Controls momentum relaxation timescales and affects dynamics at short times.
 
 ### Simulation Control
 
