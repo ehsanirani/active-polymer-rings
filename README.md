@@ -31,43 +31,136 @@ julia --project=. scripts/simulate.jl --system double \
 
 ### System Configuration
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `--system` | System type: `single` or `double` | `single` |
-| `--n-monomers` | Monomers in single ring | 100 |
-| `--n-active` | Active monomers in single ring | 0 |
-| `--n-monomers-1` | Monomers in ring 1 (double) | 100 |
-| `--n-monomers-2` | Monomers in ring 2 (double) | 100 |
-| `--n-active-1` | Active monomers in ring 1 | 0 |
-| `--n-active-2` | Active monomers in ring 2 | 0 |
+**`--system`** (default: `single`)
+Choose simulation type: `single` for one polymer ring or `double` for two catenated (linked) rings.
+
+**`--n-monomers`** (default: 100) — *Single ring only*
+Number of monomers in the polymer ring. Typical range: 50-500.
+Larger values increase computational cost but allow studying longer-wavelength fluctuations and more realistic polymer behavior.
+
+**`--n-active`** (default: 0) — *Single ring only*
+Number of active (self-propelled) monomers. Range: 0 to `--n-monomers`.
+- `0`: Purely thermal (equilibrium) polymer
+- `10-50`: Partially active system with mixed dynamics
+- Equal to `--n-monomers`: Fully active ring
+
+**`--n-monomers-1`** (default: 100) — *Double ring only*
+Number of monomers in the first polymer ring. Typical range: 50-500.
+
+**`--n-monomers-2`** (default: 100) — *Double ring only*
+Number of monomers in the second polymer ring. Typical range: 50-500.
+Can differ from `--n-monomers-1` to study asymmetric catenanes.
+
+**`--n-active-1`** (default: 0) — *Double ring only*
+Number of active monomers in the first ring. Range: 0 to `--n-monomers-1`.
+
+**`--n-active-2`** (default: 0) — *Double ring only*
+Number of active monomers in the second ring. Range: 0 to `--n-monomers-2`.
+Can differ from `--n-active-1` to create heterogeneous activity patterns.
 
 ### Physics Parameters
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `--fact` | Active force magnitude | 1.0 |
-| `--kangle` | Angle bending constant | 0.0 |
-| `--kbond` | Bond spring constant | 30.0 |
-| `--KT` | Temperature | 1.0 |
-| `--gamma` | Damping coefficient | 2.0 |
+**`--fact`** (default: 1.0) — *Dimensionless*
+Active force magnitude applied to active monomers along their local tangent direction.
+Typical range: 0.1-10.0. Higher values drive the system further from thermal equilibrium.
+The ratio `fact/KT` determines whether activity or thermal fluctuations dominate dynamics.
+
+**`--kangle`** (default: 0.0) — *Energy units*
+Angle bending rigidity constant. Controls polymer stiffness via a cosine angle potential.
+- `0.0`: Freely jointed chain (flexible polymer)
+- `1.0-5.0`: Semi-flexible polymer (DNA-like)
+- `>10.0`: Stiff rod-like behavior
+
+Note: When `kangle > 0`, the system uses explicit angle potentials. When `kangle = 0`, tangent forces drive activity.
+
+**`--kbond`** (default: 30.0) — *Energy units*
+Bond spring constant for FENE (finitely extensible nonlinear elastic) bonds connecting monomers.
+Typical range: 10-100. Higher values create stiffer bonds. Rarely needs adjustment from default.
+
+**`--KT`** (default: 1.0) — *Energy units*
+Thermal energy (temperature). All other energies are measured relative to this value.
+Typical range: 0.1-10.0. Increasing `KT` enhances thermal fluctuations.
+Key ratio: `fact/KT` determines the balance between active forcing and thermal noise.
+
+**`--gamma`** (default: 2.0) — *Inverse time units*
+Damping coefficient (friction) for Langevin dynamics.
+Typical range: 0.5-5.0. Controls momentum relaxation timescales and affects dynamics at short times.
 
 ### Simulation Control
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `--dt` | Integration timestep | 0.01 |
-| `--n-steps` | Active dynamics steps | 1,000,000 |
-| `--thermal-steps` | Thermalization steps | 200,000 |
-| `--logger-steps` | Logging frequency | 500 |
+**`--dt`** (default: 0.01) — *Time units*
+Integration timestep for the Velocity Verlet algorithm.
+Must be small enough for numerical stability (typically `dt < 0.1`). If the simulation crashes or shows instabilities, decrease this value.
+Total simulation time = `(thermal-steps + n-steps) × dt`.
+
+**`--n-steps`** (default: 1,000,000)
+Number of timesteps for the active dynamics phase (production run).
+Typical range: 10⁵ - 10⁷ steps. This is your main data collection period after equilibration.
+
+**`--thermal-steps`** (default: 200,000)
+Number of timesteps for thermalization (equilibration) before turning on active forces.
+Allows the system to relax to a typical equilibrium configuration. Typical: 10⁴ - 10⁶ steps.
+
+**`--logger-steps`** (default: 500)
+Data logging frequency. Coordinates and observables are saved every N steps.
+Lower values = more frequent logging = larger output files. Higher values = less temporal resolution.
 
 ### Advanced Options
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `--L` | Box size (0=auto-calculate) | 0.0 |
-| `--rcut-neighbor-finder` | Neighbor cutoff distance | 2.0 |
-| `--no-minimize` | Skip energy minimization | `false` |
-| `--simid` | Simulation identifier | `""` |
+**`--L`** (default: 0.0) — *Length units*
+Periodic boundary box side length (cubic box).
+- `0.0`: Auto-calculate based on polymer size using scaling law `L = 3.0 × n^0.5887`
+- Manual value: Ensure `L > 2 × Rg` (twice the radius of gyration) to avoid self-interactions
+
+**`--rcut-neighbor-finder`** (default: 2.0) — *Length units*
+Cutoff distance for neighbor list construction (optimization for pairwise interactions).
+Usually no need to change. Must be larger than the interaction range of soft-sphere potentials.
+
+**`--no-minimize`**
+Flag to skip initial energy minimization step.
+By default, the system performs steepest descent minimization to remove bad contacts. Only skip if continuing from a pre-equilibrated configuration.
+
+**`--simid`** (default: `""`)
+Simulation identifier appended to output filenames.
+Useful for running parameter sweeps or multiple replicates: e.g., `--simid run01` creates files like `single_100_10_0.0_1.0_run01.jld2`.
+
+**`--nthreads`** (default: 1)
+Number of CPU threads for parallel force calculations.
+Limited speedup for small systems. Consider using for `n_monomers > 500`.
+
+### Common Parameter Combinations
+
+**Equilibrium polymer (thermal fluctuations only)**
+```bash
+julia --project=. scripts/simulate.jl --system single \
+  --n-monomers 100 --n-active 0
+```
+
+**Weakly active flexible ring**
+```bash
+julia --project=. scripts/simulate.jl --system single \
+  --n-monomers 100 --n-active 20 --fact 1.0 --kangle 0.0
+```
+
+**Strongly active semi-flexible ring**
+```bash
+julia --project=. scripts/simulate.jl --system single \
+  --n-monomers 100 --n-active 50 --fact 5.0 --kangle 5.0
+```
+
+**Double ring with asymmetric activity**
+```bash
+julia --project=. scripts/simulate.jl --system double \
+  --n-monomers-1 100 --n-monomers-2 150 \
+  --n-active-1 30 --n-active-2 10 --fact 3.0
+```
+
+**Quick test run (small system, short time)**
+```bash
+julia --project=. scripts/simulate.jl --system single \
+  --n-monomers 50 --n-active 10 --fact 2.0 \
+  --n-steps 10000 --thermal-steps 5000 --logger-steps 100
+```
 
 ## Output Files
 
