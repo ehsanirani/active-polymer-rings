@@ -69,10 +69,16 @@ function parse_commandline()
             default = 30.0
             
         "--dt"
-            help = "Time step"
+            help = "Time step for active dynamics"
             arg_type = Float64
             default = 0.01
-            
+
+        "--dt-thermal"
+            help = "Time step for thermalization (defaults to --dt if not specified)"
+            arg_type = Float64
+            default = 0.0
+            dest_name = "dt_thermal"
+
         "--n-steps"
             help = "Active simulation steps"
             arg_type = Int
@@ -234,7 +240,7 @@ function run_thermalization(params::Parameters, sim_bodies::SimBodies; rcut_nf::
     sim_bodies.neighbor_finder = create_neighbor_finder(sim_bodies.coords, rcut_nf)
     sys = create_initial_system(params, sim_bodies; loggers=loggers)
 
-    vverlet = Molly.VelocityVerlet(dt=params.dt, remove_CM_motion=true)
+    vverlet = Molly.VelocityVerlet(dt=params.dt_thermal, remove_CM_motion=true)
     Molly.simulate!(sys, vverlet, params.thermal_steps, n_threads=params.nthreads)
 
     finish!(progress_logger.progress)
@@ -367,6 +373,7 @@ function main(args=ARGS)
             kangle=parsed[:kangle],
             kbond=parsed[:kbond],
             dt=parsed[:dt],
+            dt_thermal=parsed[:dt_thermal],
             n_steps=parsed[:n_steps],
             thermal_steps=parsed[:thermal_steps],
             logger_steps=parsed[:logger_steps],
@@ -387,6 +394,7 @@ function main(args=ARGS)
             kangle=parsed[:kangle],
             kbond=parsed[:kbond],
             dt=parsed[:dt],
+            dt_thermal=parsed[:dt_thermal],
             n_steps=parsed[:n_steps],
             thermal_steps=parsed[:thermal_steps],
             logger_steps=parsed[:logger_steps],
