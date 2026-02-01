@@ -37,6 +37,14 @@ using StaticArrays: SVector
         @test length(activity) == 100
         @test sum(activity) == 30
     end
+
+    @testset "Thermal dt defaults to dt" begin
+        p1 = Parameters(system_type=:single, n_monomers=100, dt=0.01)
+        @test p1.dt_thermal == 0.01  # Should default to dt
+
+        p2 = Parameters(system_type=:single, n_monomers=100, dt=0.01, dt_thermal=0.02)
+        @test p2.dt_thermal == 0.02  # Should use specified value
+    end
 end
 
 @testset "BODIES" begin

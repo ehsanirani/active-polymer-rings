@@ -82,9 +82,13 @@ Controls momentum relaxation timescales and affects dynamics at short times.
 ### Simulation Control
 
 **`--dt`** (default: 0.01) — *Time units*
-Integration timestep for the Velocity Verlet algorithm.
+Integration timestep for the active dynamics phase using the Velocity Verlet algorithm.
 Must be small enough for numerical stability (typically `dt < 0.1`). If the simulation crashes or shows instabilities, decrease this value.
-Total simulation time = `(thermal-steps + n-steps) × dt`.
+
+**`--dt-thermal`** (default: same as `--dt`) — *Time units*
+Integration timestep for the thermalization (equilibration) phase.
+Defaults to the same value as `--dt` if not specified. You may want to use a larger timestep during thermalization for faster equilibration since there are no active forces that might require smaller timesteps for stability.
+Example: `--dt 0.01 --dt-thermal 0.02` uses a larger timestep during equilibration.
 
 **`--n-steps`** (default: 1,000,000)
 Number of timesteps for the active dynamics phase (production run).
