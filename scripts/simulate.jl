@@ -234,6 +234,10 @@ function run_thermalization(params::Parameters, sim_bodies::SimBodies; rcut_nf::
                           params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                           params.system_type == :single ? 0 : params.n_monomers_2),
         "tangents" => TangentLogger(params.logger_steps, params),
+        "msd" => MSDLogger(params.logger_steps, params.system_type,
+                           params.system_type == :single ? params.n_monomers : params.n_monomers_1,
+                           params.system_type == :single ? 0 : params.n_monomers_2,
+                           sim_bodies.coords, sim_bodies.boundary),
         "progress" => progress_logger
     )
 
@@ -268,6 +272,10 @@ function run_active_dynamics(params::Parameters, sim_bodies::SimBodies; rcut_nf:
                           params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                           params.system_type == :single ? 0 : params.n_monomers_2),
         "tangents" => TangentLogger(params.logger_steps, params),
+        "msd" => MSDLogger(params.logger_steps, params.system_type,
+                           params.system_type == :single ? params.n_monomers : params.n_monomers_1,
+                           params.system_type == :single ? 0 : params.n_monomers_2,
+                           sim_bodies.coords, sim_bodies.boundary),
         "progress" => progress_logger
     )
 
@@ -292,13 +300,13 @@ function save_results(params::Parameters, thermal_sys, active_sys, sim_bodies; s
     mkpath("_data/jld2")
     mkpath("_data/csv")
     
-    # Generate filename
+    # Generate filename with descriptive pattern
     if system_type == :single
-        fname = "single_$(params.n_monomers)_$(params.n_active)_$(params.kangle)_$(params.factive)"
+        fname = "single_N$(params.n_monomers)_Nact$(params.n_active)_kang$(params.kangle)_fact$(params.factive)"
     else
-        fname = "double_$(params.n_monomers_1)_$(params.n_monomers_2)_$(params.n_active_1)_$(params.n_active_2)_$(params.kangle)_$(params.factive)"
+        fname = "double_N1_$(params.n_monomers_1)_N2_$(params.n_monomers_2)_Nact1_$(params.n_active_1)_Nact2_$(params.n_active_2)_kang$(params.kangle)_fact$(params.factive)"
     end
-    
+
     if !isempty(simid)
         fname *= "_$(simid)"
     end

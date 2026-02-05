@@ -4,7 +4,7 @@ using Statistics
 using Random
 
 export gyration_tensor_eigenvalues, compute_rg_timeseries
-export compute_msd, compute_rs, compute_beta
+export compute_msd, compute_msd_com_timeaveraged, compute_rs, compute_beta
 
 """
     gyration_tensor_eigenvalues(positions::Vector{SVector{3, Float64}})
@@ -89,6 +89,46 @@ function compute_msd(coords_history::Vector{Vector{SVector{3, Float64}}}, max_sa
         end
 
         msd_array[t] = total_msd / (N * m)
+    end
+
+    return msd_array
+end
+
+"""
+    compute_msd_com_timeaveraged(coords_history::Vector{Vector{SVector{3, Float64}}}, max_samples::Int=1000)
+
+Compute time-averaged MSD for the center of mass.
+
+Uses multiple time origins to improve statistics.
+
+Arguments:
+- coords_history: Vector of coordinate frames
+- max_samples: Maximum number of time origins to sample
+
+Returns:
+- msd_array: COM MSD values for each lag time
+"""
+function compute_msd_com_timeaveraged(coords_history::Vector{Vector{SVector{3, Float64}}}, max_samples::Int=1000)
+    n_frames = length(coords_history)
+
+    # Compute center of mass for each frame
+    com_history = [sum(coords) / length(coords) for coords in coords_history]
+
+    msd_array = Vector{Float64}(undef, n_frames-1)
+
+    for t in 1:n_frames-1
+        total_msd = 0.0
+
+        # Sample time origins
+        m = min(max_samples, n_frames - t)
+        idxs = randperm(n_frames - t)[1:m]
+
+        for j in idxs
+            diff = com_history[j+t] - com_history[j]
+            total_msd += dot(diff, diff)
+        end
+
+        msd_array[t] = total_msd / m
     end
 
     return msd_array

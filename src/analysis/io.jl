@@ -4,7 +4,7 @@ using DataFrames
 using Printf
 using StaticArrays
 
-export load_simulation_data, split_rings_coords, split_rings_tangents
+export load_simulation_data, load_msd_from_file, split_rings_coords, split_rings_tangents
 export save_rg_csv, save_msd_csv, save_rs_csv, save_beta_csv
 
 """
@@ -27,6 +27,44 @@ function load_simulation_data(filepath::String; phase::Symbol=:active)
 
         return coords, tangents, params
     end
+end
+
+"""
+    load_msd_from_file(filepath::String; phase::Symbol=:active)
+
+Load both time-averaged and non-time-averaged MSD from a JLD2 file.
+
+Returns:
+- Named tuple with msd_monomer, msd_com, msd_monomer_avg, msd_com_avg, lag_times
+"""
+function load_msd_from_file(filepath::String; phase::Symbol=:active)
+    data = jldopen(filepath, "r")
+    phase_str = string(phase)
+
+    # Load non-time-averaged from logger
+    msd_logger = data["$(phase_str)/loggers"]["msd"]
+    msd_monomer = msd_logger.msd_monomer
+    msd_com = msd_logger.msd_com
+
+    # Load coords for time-averaged computation
+    coords_history = data["$(phase_str)/loggers"]["coords"].history
+    params = data["params"]
+    close(data)
+
+    # Compute time-averaged
+    msd_monomer_avg = compute_msd(coords_history)
+    msd_com_avg = compute_msd_com_timeaveraged(coords_history)
+
+    # Time arrays
+    dt = phase == :active ? params.dt : params.dt_thermal
+    time_interval = dt * params.logger_steps
+    lag_times = collect(1:length(msd_monomer)) .* time_interval
+
+    return (msd_monomer=msd_monomer,
+            msd_com=msd_com,
+            msd_monomer_avg=msd_monomer_avg,
+            msd_com_avg=msd_com_avg,
+            lag_times=lag_times)
 end
 
 """

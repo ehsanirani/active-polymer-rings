@@ -1,0 +1,17 @@
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Pluto
+*.jl.bak
+
+# Generated figures
+output/*.png
+output/*.pdf
+output/*.svg
+
+# But keep the directory
+!output/.gitkeep
+
+# Manifest (let users generate their own)
+Manifest.toml
