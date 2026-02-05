@@ -27,6 +27,46 @@ julia --project=. scripts/simulate.jl --system double \
 - **Energy minimization** → **Thermalization** → **Active dynamics**
 - Output saved to `_data/jld2/` and `_data/sims/`
 
+## Configuration
+
+### Using Config Files
+
+Instead of passing many CLI arguments, you can use a TOML config file:
+
+```bash
+# Use a config file
+julia --project=. scripts/simulate.jl --config config/example_active_ring.toml
+
+# Override specific values from config
+julia --project=. scripts/simulate.jl --config config/example_active_ring.toml --n-active 30
+
+# CLI arguments always override config file values
+```
+
+Config files are stored in the `config/` folder. See `config/default.toml` for all available options.
+
+**Example config file (`config/example_quick_test.toml`):**
+```toml
+[system]
+type = "single"
+
+[single_ring]
+n_monomers = 50
+n_active = 10
+
+[physics]
+factive = 2.0
+
+[simulation]
+n_steps = 10000
+thermal_steps = 5000
+```
+
+### Priority Order
+1. CLI arguments (highest priority)
+2. Config file values
+3. Default values (lowest priority)
+
 ## Parameters
 
 ### System Configuration
