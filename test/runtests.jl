@@ -31,11 +31,26 @@ using StaticArrays: SVector
         @test p2.L > p1.L
     end
     
-    @testset "Activity Vector" begin
-        p = Parameters(system_type=:single, n_monomers=100, n_active=30)
+    @testset "Activity Vector - Random" begin
+        p = Parameters(system_type=:single, n_monomers=100, n_active=30, activity_pattern=:random)
         activity = get_activity_vector(p)
         @test length(activity) == 100
         @test sum(activity) == 30
+    end
+
+    @testset "Activity Vector - Block" begin
+        p = Parameters(system_type=:single, n_monomers=100, n_active=30, activity_pattern=:block)
+        activity = get_activity_vector(p)
+        @test length(activity) == 100
+        @test sum(activity) == 30
+        # Block pattern: first 30 should be active, rest passive
+        @test all(activity[1:30])
+        @test !any(activity[31:100])
+    end
+
+    @testset "Activity Pattern defaults to random" begin
+        p = Parameters(system_type=:single, n_monomers=100)
+        @test p.activity_pattern == :random
     end
 
     @testset "Thermal dt defaults to dt" begin

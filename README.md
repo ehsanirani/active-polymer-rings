@@ -44,6 +44,11 @@ Number of active (self-propelled) monomers. Range: 0 to `--n-monomers`.
 - `10-50`: Partially active system with mixed dynamics
 - Equal to `--n-monomers`: Fully active ring
 
+**`--activity-pattern`** (default: `random`)
+Distribution of active monomers along the polymer chain:
+- `random`: Active monomers randomly distributed (shuffled)
+- `block`: Active monomers form a contiguous block starting from monomer 1
+
 **`--n-monomers-1`** (default: 100) — *Double ring only*
 Number of monomers in the first polymer ring. Typical range: 50-500.
 

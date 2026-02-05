@@ -32,6 +32,13 @@ function parse_commandline()
             default = 0
             dest_name = "n_active"
 
+        "--activity-pattern"
+            help = "Distribution of active monomers: random or block"
+            arg_type = String
+            default = "random"
+            range_tester = x -> x in ["random", "block"]
+            dest_name = "activity_pattern"
+
         "--n-monomers-1"
             help = "For double ring: monomers in ring 1"
             arg_type = Int
@@ -521,6 +528,7 @@ function main(args=ARGS)
             msd_time_averaged=parsed[:msd_time_averaged],
             export_xyz=parsed[:export_xyz],
             metrics_format=Symbol(parsed[:metrics_format]),
+            activity_pattern=Symbol(parsed[:activity_pattern]),
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],
@@ -549,6 +557,7 @@ function main(args=ARGS)
             msd_time_averaged=parsed[:msd_time_averaged],
             export_xyz=parsed[:export_xyz],
             metrics_format=Symbol(parsed[:metrics_format]),
+            activity_pattern=Symbol(parsed[:activity_pattern]),
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],
@@ -560,7 +569,7 @@ function main(args=ARGS)
     println("\n🚀 Starting $(system_type) ring simulation")
     println("   System: $(system_type == :single ? "1 ring" : "2 rings")")
     println("   Total monomers: $(get_n_particles(params))")
-    println("   Active monomers: $(get_n_active(params))")
+    println("   Active monomers: $(get_n_active(params)) ($(params.activity_pattern))")
     println("   Active force: $(params.factive)")
     println("   Temperature: $(params.KT)")
     println("   Angle constant: $(params.kangle)")

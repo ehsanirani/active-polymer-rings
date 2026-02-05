@@ -31,6 +31,9 @@ mutable struct Parameters <: AbstractParameters
     rcut_nf::Float64
     L::Float64
     
+    # Activity distribution
+    activity_pattern::Symbol   # :random or :block
+
     # Single ring parameters (used when system_type == :single)
     n_monomers::Int64
     n_active::Int64
@@ -48,6 +51,8 @@ function Parameters(; system_type::Symbol=:single,
                    traj_interval=500, metric_mode=:fixed, metric_interval=0, metric_npoints=1000,
                    msd_com=false, msd_time_averaged=false, export_xyz=false, metrics_format=:jld2,
                    L=0.0, nthreads=0, γ=2.0, rcut_nf=2.0,
+                   # Activity distribution
+                   activity_pattern=:random,
                    # Single ring
                    n_monomers=100, n_active=0,
                    # Double ring
@@ -90,6 +95,7 @@ function Parameters(; system_type::Symbol=:single,
         traj_interval, metric_mode, metric_interval, metric_npoints,
         msd_com, msd_time_averaged, export_xyz, metrics_format,
         nthreads, γ, rcut_nf, L,
+        activity_pattern,
         n_monomers, n_active,
         n_monomers_1, n_monomers_2, n_active_1, n_active_2
     )
@@ -118,17 +124,23 @@ function get_activity_vector(params::Parameters)
         n_total = params.n_monomers
         activity = vcat(repeat([true], params.n_active),
                        repeat([false], n_total - params.n_active))
-        return shuffle(activity)
+        # Shuffle for random pattern, keep as-is for block pattern
+        return params.activity_pattern == :random ? shuffle(activity) : activity
     else
         # For double rings, create activity vectors for each ring and combine
         total_1 = params.n_monomers_1
         total_2 = params.n_monomers_2
-        
+
         activity_1 = vcat(repeat([true], params.n_active_1),
                          repeat([false], total_1 - params.n_active_1))
         activity_2 = vcat(repeat([true], params.n_active_2),
                          repeat([false], total_2 - params.n_active_2))
-        
-        return vcat(shuffle(activity_1), shuffle(activity_2))
+
+        if params.activity_pattern == :random
+            return vcat(shuffle(activity_1), shuffle(activity_2))
+        else
+            # Block pattern: active monomers at start of each ring
+            return vcat(activity_1, activity_2)
+        end
     end
 end
