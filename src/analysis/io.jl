@@ -13,13 +13,16 @@ export save_rg_csv, save_msd_csv, save_rs_csv, save_beta_csv
 Load simulation results from JLD2 file.
 
 Returns: (coords_history, tangents_history, params)
+Note: coords_history may be `nothing` if coords were not stored (msd_time_averaged disabled).
 """
 function load_simulation_data(filepath::String; phase::Symbol=:active)
     jldopen(filepath, "r") do f
         phase_str = string(phase)
+        loggers = f["$(phase_str)/loggers"]
 
-        coords = f["$(phase_str)/loggers"]["coords"].history
-        tangents_raw = f["$(phase_str)/loggers"]["tangents"].tang_vecs
+        # Coords may not be present if msd_time_averaged was disabled
+        coords = haskey(loggers, "coords") ? loggers["coords"].history : nothing
+        tangents_raw = loggers["tangents"].tang_vecs
         params = f["params"]
 
         # Convert tangents to SVector format if needed
@@ -42,20 +45,26 @@ function load_msd_from_file(filepath::String; phase::Symbol=:active)
     phase_str = string(phase)
 
     # Load non-time-averaged from logger
-    msd_logger = data["$(phase_str)/loggers"]["msd"]
+    loggers = data["$(phase_str)/loggers"]
+    msd_logger = loggers["msd"]
     msd_monomer = msd_logger.msd_monomer
     msd_com = msd_logger.msd_com
 
-    # Load coords for time-averaged computation
-    coords_history = data["$(phase_str)/loggers"]["coords"].history
+    # Coords may not be present if msd_time_averaged was disabled
+    has_coords = haskey(loggers, "coords")
+    coords_history = has_coords ? loggers["coords"].history : nothing
     params = data["params"]
     close(data)
 
     # Check flags (with backward-compatible defaults)
     do_com = hasproperty(params, :msd_com) ? params.msd_com : true
+    # Time-averaged MSD requires coords - disable if not available
     do_timeavg = hasproperty(params, :msd_time_averaged) ? params.msd_time_averaged : true
+    if do_timeavg && !has_coords
+        do_timeavg = false
+    end
 
-    # Compute time-averaged (if enabled)
+    # Compute time-averaged (if enabled and coords available)
     msd_monomer_avg = do_timeavg ? compute_msd(coords_history) : Float64[]
     msd_com_avg = (do_timeavg && do_com) ? compute_msd_com_timeaveraged(coords_history) : Float64[]
 

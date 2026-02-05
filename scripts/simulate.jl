@@ -120,9 +120,14 @@ function parse_commandline()
             dest_name = "msd_com"
 
         "--msd-time-averaged"
-            help = "Enable time-averaged MSD computation in analysis (disabled by default)"
+            help = "Enable time-averaged MSD computation in analysis (stores coords in JLD2)"
             action = :store_true
             dest_name = "msd_time_averaged"
+
+        "--export-xyz"
+            help = "Export XYZ trajectory files (disabled by default)"
+            action = :store_true
+            dest_name = "export_xyz"
 
         "--L"
             help = "Box size (0 to auto-calculate)"
@@ -352,20 +357,33 @@ function save_results(params::Parameters, thermal_sys, active_sys, sim_bodies; s
         fname *= "_$(simid)"
     end
     
-    # Save JLD2 data
+    # Save JLD2 data (exclude coords unless msd_time_averaged is enabled)
+    # Always exclude progress logger (not needed for post-processing)
+    excluded_loggers = ["progress"]
+    if !params.msd_time_averaged
+        push!(excluded_loggers, "coords")  # coords only needed for time-averaged MSD
+    end
+
     jldopen("_data/jld2/$(fname).jld2", "w"; compress=true) do file
         file["params"] = params
-        file["thermal/loggers"] = thermal_sys.loggers
-        file["active/loggers"] = active_sys.loggers
+        file["thermal/loggers"] = Dict(k => v for (k, v) in thermal_sys.loggers if k ∉ excluded_loggers)
+        file["active/loggers"] = Dict(k => v for (k, v) in active_sys.loggers if k ∉ excluded_loggers)
     end
-    
-    # Save XYZ files
-    save_xyz(thermal_sys, sim_bodies, "_data/sims/$(fname)_thermal.xyz")
-    save_xyz(active_sys, sim_bodies, "_data/sims/$(fname)_active.xyz")
+
+    # Save XYZ files (only if enabled)
+    if params.export_xyz
+        save_xyz(thermal_sys, sim_bodies, "_data/sims/$(fname)_thermal.xyz")
+        save_xyz(active_sys, sim_bodies, "_data/sims/$(fname)_active.xyz")
+    end
 
     println("\n✓ Results saved:")
     println("  JLD2: _data/jld2/$(fname).jld2")
-    println("  XYZ:  _data/sims/$(fname)_{thermal,active}.xyz")
+    if params.msd_time_averaged
+        println("        (includes coords for time-averaged MSD)")
+    end
+    if params.export_xyz
+        println("  XYZ:  _data/sims/$(fname)_{thermal,active}.xyz")
+    end
 end
 
 function save_xyz(sys, sim_bodies, filename)
@@ -431,6 +449,7 @@ function main(args=ARGS)
             metric_npoints=parsed[:metric_npoints],
             msd_com=parsed[:msd_com],
             msd_time_averaged=parsed[:msd_time_averaged],
+            export_xyz=parsed[:export_xyz],
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],
@@ -457,6 +476,7 @@ function main(args=ARGS)
             metric_npoints=parsed[:metric_npoints],
             msd_com=parsed[:msd_com],
             msd_time_averaged=parsed[:msd_time_averaged],
+            export_xyz=parsed[:export_xyz],
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],

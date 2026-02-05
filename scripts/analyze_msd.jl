@@ -14,23 +14,32 @@ function analyze_msd(jld2_file::String; phase::Symbol=:active)
     # Load data
     data = jldopen(jld2_file, "r")
     phase_str = string(phase)
-    coords_history = data["$(phase_str)/loggers"]["coords"].history
-    msd_logger = data["$(phase_str)/loggers"]["msd"]
+    loggers = data["$(phase_str)/loggers"]
+    msd_logger = loggers["msd"]
     params = data["params"]
+    # Coords may not be present if msd_time_averaged was disabled
+    has_coords = haskey(loggers, "coords")
+    coords_history = has_coords ? loggers["coords"].history : nothing
     close(data)
 
-    n_frames = length(coords_history)
     dt = phase == :active ? params.dt : params.dt_thermal
     traj_int = hasproperty(params, :traj_interval) ? params.traj_interval : params.logger_steps
     time_interval = dt * traj_int
 
-    println("Number of frames: $n_frames")
+    if has_coords
+        println("Number of coord frames: $(length(coords_history))")
+    end
     println("Trajectory time interval: $time_interval")
     println()
 
     # Check flags (with backward-compatible defaults)
     do_com = hasproperty(params, :msd_com) ? params.msd_com : true
+    # Time-averaged MSD requires coords - disable if not available
     do_timeavg = hasproperty(params, :msd_time_averaged) ? params.msd_time_averaged : true
+    if do_timeavg && !has_coords
+        println("Note: Coords not stored in JLD2, skipping time-averaged MSD")
+        do_timeavg = false
+    end
 
     # Get non-time-averaged MSD from logger (already computed)
     println("Loading non-time-averaged MSD from simulation...")

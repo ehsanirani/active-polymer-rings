@@ -38,20 +38,26 @@ function load_msd_from_jld2(filepath::String; phase::Symbol=:active)
     end
 
     # Load non-time-averaged MSD
-    msd_logger = data["$(phase_str)/loggers"]["msd"]
+    loggers = data["$(phase_str)/loggers"]
+    msd_logger = loggers["msd"]
     msd_monomer_noavg = msd_logger.msd_monomer
     msd_com_noavg = msd_logger.msd_com
 
-    # Load coordinates for time-averaged computation
-    coords_history = data["$(phase_str)/loggers"]["coords"].history
+    # Coords may not be present if msd_time_averaged was disabled
+    has_coords = haskey(loggers, "coords")
+    coords_history = has_coords ? loggers["coords"].history : nothing
     params = data["params"]
     close(data)
 
     # Check flags (with backward-compatible defaults)
     do_com = hasproperty(params, :msd_com) ? params.msd_com : true
     do_timeavg = hasproperty(params, :msd_time_averaged) ? params.msd_time_averaged : true
+    if do_timeavg && !has_coords
+        println("Note: Coords not stored in JLD2, skipping time-averaged MSD")
+        do_timeavg = false
+    end
 
-    # Compute time-averaged MSD (if enabled)
+    # Compute time-averaged MSD (if enabled and coords available)
     if do_timeavg
         println("Computing time-averaged MSD...")
         msd_monomer_avg = compute_msd(coords_history)

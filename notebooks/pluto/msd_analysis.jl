@@ -59,18 +59,27 @@ begin
         phase_str = string(phase)
 
         # Load MSD logger data (non-time-averaged, already computed)
-        msd_logger = data["$(phase_str)/loggers"]["msd"]
+        loggers = data["$(phase_str)/loggers"]
+        msd_logger = loggers["msd"]
         msd_monomer_noavg = msd_logger.msd_monomer
         msd_com_noavg = msd_logger.msd_com
 
-        # Load coordinates for time-averaged computation
-        coords_history = data["$(phase_str)/loggers"]["coords"].history
+        # Coords may not be present if msd_time_averaged was disabled
+        has_coords = haskey(loggers, "coords")
+        coords_history = has_coords ? loggers["coords"].history : nothing
         params = data["params"]
         close(data)
 
-        # Compute time-averaged MSD
-        msd_monomer_avg = compute_msd(coords_history)
-        msd_com_avg = compute_msd_com_timeaveraged(coords_history)
+        # Check flags (with backward-compatible defaults)
+        do_com = hasproperty(params, :msd_com) ? params.msd_com : true
+        do_timeavg = hasproperty(params, :msd_time_averaged) ? params.msd_time_averaged : true
+        if do_timeavg && !has_coords
+            do_timeavg = false
+        end
+
+        # Compute time-averaged MSD (if enabled and coords available)
+        msd_monomer_avg = do_timeavg ? compute_msd(coords_history) : Float64[]
+        msd_com_avg = (do_timeavg && do_com) ? compute_msd_com_timeaveraged(coords_history) : Float64[]
 
         # Calculate lag times — use step_indices if available (new format)
         dt = phase == :active ? params.dt : params.dt_thermal
@@ -81,13 +90,15 @@ begin
         else
             lag_times_noavg = collect(1:length(msd_monomer_noavg)) .* time_interval
         end
-        lag_times_avg = collect(1:length(msd_monomer_avg)) .* time_interval
+        lag_times_avg = do_timeavg ? collect(1:length(msd_monomer_avg)) .* time_interval : Float64[]
 
         md"""
         ✓ **Data loaded successfully**
         - Frames (non-averaged): $(length(msd_monomer_noavg))
         - Frames (time-averaged): $(length(msd_monomer_avg))
         - Time interval: $time_interval
+        - COM MSD: $(do_com ? "enabled" : "disabled")
+        - Time-averaged MSD: $(do_timeavg ? "enabled" : "disabled")
         """
     else
         md"""

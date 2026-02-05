@@ -170,7 +170,14 @@ msd_com_noavg = msd_logger.msd_com  # may be empty unless --msd-com was used
 do_com = hasproperty(params, :msd_com) ? params.msd_com : true
 do_timeavg = hasproperty(params, :msd_time_averaged) ? params.msd_time_averaged : true
 
-# Compute time-averaged MSD (if enabled)
+# Coords may not be present if --msd-time-averaged was not used
+has_coords = haskey(loggers, "coords")
+if do_timeavg && !has_coords
+    do_timeavg = false
+end
+coords_history = has_coords ? loggers["coords"].history : nothing
+
+# Compute time-averaged MSD (if enabled and coords available)
 msd_monomer_avg = do_timeavg ? compute_msd(coords_history) : Float64[]
 msd_com_avg = (do_timeavg && do_com) ? compute_msd_com_timeaveraged(coords_history) : Float64[]
 

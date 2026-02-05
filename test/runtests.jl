@@ -57,6 +57,16 @@ using StaticArrays: SVector
         @test p.msd_com == true
         @test p.msd_time_averaged == true
     end
+
+    @testset "export_xyz defaults to false" begin
+        p = Parameters(system_type=:single, n_monomers=100)
+        @test p.export_xyz == false
+    end
+
+    @testset "export_xyz can be enabled" begin
+        p = Parameters(system_type=:single, n_monomers=100, export_xyz=true)
+        @test p.export_xyz == true
+    end
 end
 
 @testset "BODIES" begin

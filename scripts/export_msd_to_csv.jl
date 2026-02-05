@@ -36,9 +36,12 @@ function export_msd_to_csv(jld2_file::String; phase::Symbol=:active, output_dir:
         error("MSD logger not found in file. Was this simulation run with MSD tracking enabled?")
     end
 
-    coords_history = data["$(phase_str)/loggers"]["coords"].history
-    msd_logger = data["$(phase_str)/loggers"]["msd"]
+    loggers = data["$(phase_str)/loggers"]
+    msd_logger = loggers["msd"]
     params = data["params"]
+    # Coords may not be present if msd_time_averaged was disabled
+    has_coords = haskey(loggers, "coords")
+    coords_history = has_coords ? loggers["coords"].history : nothing
     close(data)
 
     # Get simulation metadata
@@ -48,7 +51,12 @@ function export_msd_to_csv(jld2_file::String; phase::Symbol=:active, output_dir:
 
     # Check flags (with backward-compatible defaults)
     do_com = hasproperty(params, :msd_com) ? params.msd_com : true
+    # Time-averaged MSD requires coords - disable if not available
     do_timeavg = hasproperty(params, :msd_time_averaged) ? params.msd_time_averaged : true
+    if do_timeavg && !has_coords
+        println("Note: Coords not stored in JLD2, skipping time-averaged MSD export")
+        do_timeavg = false
+    end
 
     # Extract run name from filename
     run_name = splitext(basename(jld2_file))[1]

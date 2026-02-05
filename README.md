@@ -129,6 +129,14 @@ By default, only monomer MSD is computed. Use this flag to also compute COM MSD.
 **`--msd-time-averaged`**
 Enable time-averaged MSD computation in post-processing analysis scripts.
 By default, only the non-time-averaged (single t₀) MSD from the simulation logger is used. Use this flag to also compute time-averaged MSD from coordinate trajectories.
+Note: This flag causes coordinate trajectories to be stored in the JLD2 file (required for time-averaged computation).
+
+### Trajectory Export
+
+**`--export-xyz`**
+Export XYZ trajectory files for visualization (disabled by default).
+Creates `{params}_thermal.xyz` and `{params}_active.xyz` files in `_data/sims/`.
+Use this flag when you need trajectories for visualization in OVITO, VMD, or similar tools.
 
 ### Advanced Options
 
@@ -203,17 +211,18 @@ Simulations create organized output in `_data/`:
 
 Binary data files containing:
 - Parameters
-- Coordinate trajectories (thermal and active phases)
+- MSD data (non-time-averaged, from simulation logger)
 - Radius of gyration time series
 - Tangent vectors and activity flags
+- Coordinate trajectories (only if `--msd-time-averaged` is enabled)
 
 **Filename format**:
 - Single: `single_{n_monomers}_{n_active}_{kangle}_{factive}[_simid].jld2`
 - Double: `double_{n1}_{n2}_{nact1}_{nact2}_{kangle}_{factive}[_simid].jld2`
 
-### XYZ Trajectories (`_data/sims/`)
+### XYZ Trajectories (`_data/sims/`) — Optional
 
-Extended XYZ format files for visualization:
+Extended XYZ format files for visualization (only created if `--export-xyz` is enabled):
 - `{params}_thermal.xyz` - Thermalization phase
 - `{params}_active.xyz` - Active dynamics phase
 
