@@ -248,6 +248,70 @@ julia --project=. scripts/simulate.jl --system single \
   --metric-mode logspaced --metric-npoints 2000
 ```
 
+## Batch Simulations
+
+The `tools/` folder contains scripts for running parameter sweeps. Both bash and fish versions are available.
+
+### Single Parameter Sweep
+
+Sweep over one parameter while keeping others fixed:
+
+```bash
+# Sweep active force
+./tools/sweep_parameter.sh config/single_ring.toml \
+    --sweep --fact "1.0 2.0 3.0 4.0 5.0"
+
+# Override some params and sweep another
+./tools/sweep_parameter.sh config/single_ring.toml \
+    --n-monomers 200 --kangle 5.0 \
+    --sweep --fact "1.0 2.0 3.0"
+
+# Run 4 simulations in parallel
+./tools/sweep_parameter.sh config/single_ring.toml \
+    --sweep --n-active "10 20 30 40" --parallel 4
+
+# Dry run to preview commands
+./tools/sweep_parameter.sh config/single_ring.toml \
+    --sweep --fact "1.0 2.0 3.0" --dry-run
+```
+
+### Grid Parameter Sweep
+
+Sweep over multiple parameters (all combinations):
+
+```bash
+# Sweep n-active and fact (3x3 = 9 simulations)
+./tools/sweep_grid.sh config/single_ring.toml \
+    --sweep --n-active "10 30 50" --sweep --fact "1.0 3.0 5.0"
+
+# Override some params and sweep others
+./tools/sweep_grid.sh config/single_ring.toml \
+    --n-monomers 200 --kangle 5.0 \
+    --sweep --n-active "10 30 50" --sweep --fact "1.0 3.0"
+
+# With parallel execution
+./tools/sweep_grid.sh config/single_ring.toml \
+    --sweep --n-active "10 20 30" --sweep --fact "1.0 2.0" --parallel 4
+```
+
+### Sweep Script Options
+
+| Option | Description |
+|--------|-------------|
+| `--sweep --param "values"` | Parameter to sweep (space-separated values) |
+| `--param value` | Fixed override (applied to all runs) |
+| `--parallel N` | Run N simulations in parallel |
+| `--dry-run` | Preview commands without executing |
+| `--prefix STR` | Prefix for simulation IDs |
+
+### Fish Shell
+
+Fish versions are also available:
+```bash
+./tools/sweep_parameter.fish config/single_ring.toml --sweep --fact "1.0 2.0 3.0"
+./tools/sweep_grid.fish config/single_ring.toml --sweep --n-active "10 30" --sweep --fact "1.0 3.0"
+```
+
 ## Output Files
 
 Simulations create organized output in `_data/`:
