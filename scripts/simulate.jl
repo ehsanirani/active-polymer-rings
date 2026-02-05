@@ -6,6 +6,9 @@ using JLD2
 using ArgParse
 using Molly
 using ProgressMeter
+using CSV
+using DataFrames
+using Printf
 
 function parse_commandline()
     s = ArgParseSettings(description="Run active polymer ring simulations")
@@ -128,6 +131,13 @@ function parse_commandline()
             help = "Export XYZ trajectory files (disabled by default)"
             action = :store_true
             dest_name = "export_xyz"
+
+        "--metrics-format"
+            help = "Output format for metrics (MSD, Rg): jld2 or csv"
+            arg_type = String
+            default = "jld2"
+            range_tester = x -> x in ["jld2", "csv"]
+            dest_name = "metrics_format"
 
         "--L"
             help = "Box size (0 to auto-calculate)"
@@ -339,13 +349,13 @@ end
 
 function save_results(params::Parameters, thermal_sys, active_sys, sim_bodies; simid::String="")
     system_type = params.system_type
-    
-    # Create output directory
+
+    # Create output directories
     mkpath("_data")
     mkpath("_data/sims")
     mkpath("_data/jld2")
     mkpath("_data/csv")
-    
+
     # Generate filename with descriptive pattern
     if system_type == :single
         fname = "single_N$(params.n_monomers)_Nact$(params.n_active)_kang$(params.kangle)_fact$(params.factive)"
@@ -356,34 +366,94 @@ function save_results(params::Parameters, thermal_sys, active_sys, sim_bodies; s
     if !isempty(simid)
         fname *= "_$(simid)"
     end
-    
-    # Save JLD2 data (exclude coords unless msd_time_averaged is enabled)
-    # Always exclude progress logger (not needed for post-processing)
-    excluded_loggers = ["progress"]
-    if !params.msd_time_averaged
-        push!(excluded_loggers, "coords")  # coords only needed for time-averaged MSD
-    end
 
-    jldopen("_data/jld2/$(fname).jld2", "w"; compress=true) do file
-        file["params"] = params
-        file["thermal/loggers"] = Dict(k => v for (k, v) in thermal_sys.loggers if k ∉ excluded_loggers)
-        file["active/loggers"] = Dict(k => v for (k, v) in active_sys.loggers if k ∉ excluded_loggers)
+    if params.metrics_format == :jld2
+        # Save metrics in JLD2 format
+        excluded_loggers = ["progress"]
+        if !params.msd_time_averaged
+            push!(excluded_loggers, "coords")  # coords only needed for time-averaged MSD
+        end
+
+        jldopen("_data/jld2/$(fname).jld2", "w"; compress=true) do file
+            file["params"] = params
+            file["thermal/loggers"] = Dict(k => v for (k, v) in thermal_sys.loggers if k ∉ excluded_loggers)
+            file["active/loggers"] = Dict(k => v for (k, v) in active_sys.loggers if k ∉ excluded_loggers)
+        end
+
+        println("\n✓ Results saved:")
+        println("  JLD2: _data/jld2/$(fname).jld2")
+        if params.msd_time_averaged
+            println("        (includes coords for time-averaged MSD)")
+        end
+    else
+        # Save metrics in CSV format
+        save_metrics_csv(params, active_sys, "_data/csv", fname, :active)
+        save_metrics_csv(params, thermal_sys, "_data/csv", fname, :thermal)
+
+        # Save params to JLD2 (for reference)
+        jldopen("_data/jld2/$(fname).jld2", "w"; compress=true) do file
+            file["params"] = params
+        end
+
+        println("\n✓ Results saved:")
+        println("  CSV:  _data/csv/$(fname)_*.csv")
+        println("  JLD2: _data/jld2/$(fname).jld2 (params only)")
     end
 
     # Save XYZ files (only if enabled)
     if params.export_xyz
         save_xyz(thermal_sys, sim_bodies, "_data/sims/$(fname)_thermal.xyz")
         save_xyz(active_sys, sim_bodies, "_data/sims/$(fname)_active.xyz")
-    end
-
-    println("\n✓ Results saved:")
-    println("  JLD2: _data/jld2/$(fname).jld2")
-    if params.msd_time_averaged
-        println("        (includes coords for time-averaged MSD)")
-    end
-    if params.export_xyz
         println("  XYZ:  _data/sims/$(fname)_{thermal,active}.xyz")
     end
+end
+
+"""
+Save metrics (MSD, Rg) to CSV files.
+"""
+function save_metrics_csv(params::Parameters, sys, output_dir::String, fname::String, phase::Symbol)
+    phase_str = string(phase)
+    dt = phase == :active ? params.dt : params.dt_thermal
+
+    # Format function for values
+    format_val(x) = @sprintf("%.6f", x)
+
+    # Save MSD data
+    msd_logger = sys.loggers["msd"]
+    if hasproperty(msd_logger, :step_indices) && !isempty(msd_logger.step_indices)
+        lag_times = msd_logger.step_indices .* dt
+    else
+        traj_int = params.traj_interval
+        lag_times = collect(1:length(msd_logger.msd_monomer)) .* (dt * traj_int)
+    end
+
+    # Monomer MSD
+    df_msd = DataFrame(
+        lag_time = lag_times,
+        msd_monomer = [format_val(x) for x in msd_logger.msd_monomer]
+    )
+    if params.msd_com && !isempty(msd_logger.msd_com)
+        df_msd.msd_com = [format_val(x) for x in msd_logger.msd_com]
+    end
+    CSV.write(joinpath(output_dir, "$(fname)_$(phase_str)_msd.csv"), df_msd)
+
+    # Save Rg data
+    rg_logger = sys.loggers["rg"]
+    if hasproperty(rg_logger, :step_indices) && !isempty(rg_logger.step_indices)
+        rg_times = rg_logger.step_indices .* dt
+    else
+        traj_int = params.traj_interval
+        rg_times = collect(1:length(rg_logger.Rg_total)) .* (dt * traj_int)
+    end
+
+    df_rg = DataFrame(
+        time = rg_times,
+        Rg = [format_val(x) for x in rg_logger.Rg_total],
+        Rg1 = [format_val(x) for x in rg_logger.Rg1],
+        Rg2 = [format_val(x) for x in rg_logger.Rg2],
+        Rg3 = [format_val(x) for x in rg_logger.Rg3]
+    )
+    CSV.write(joinpath(output_dir, "$(fname)_$(phase_str)_rg.csv"), df_rg)
 end
 
 function save_xyz(sys, sim_bodies, filename)
@@ -450,6 +520,7 @@ function main(args=ARGS)
             msd_com=parsed[:msd_com],
             msd_time_averaged=parsed[:msd_time_averaged],
             export_xyz=parsed[:export_xyz],
+            metrics_format=Symbol(parsed[:metrics_format]),
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],
@@ -477,6 +548,7 @@ function main(args=ARGS)
             msd_com=parsed[:msd_com],
             msd_time_averaged=parsed[:msd_time_averaged],
             export_xyz=parsed[:export_xyz],
+            metrics_format=Symbol(parsed[:metrics_format]),
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],

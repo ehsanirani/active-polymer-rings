@@ -67,6 +67,16 @@ using StaticArrays: SVector
         p = Parameters(system_type=:single, n_monomers=100, export_xyz=true)
         @test p.export_xyz == true
     end
+
+    @testset "metrics_format defaults to jld2" begin
+        p = Parameters(system_type=:single, n_monomers=100)
+        @test p.metrics_format == :jld2
+    end
+
+    @testset "metrics_format can be set to csv" begin
+        p = Parameters(system_type=:single, n_monomers=100, metrics_format=:csv)
+        @test p.metrics_format == :csv
+    end
 end
 
 @testset "BODIES" begin

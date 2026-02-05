@@ -131,7 +131,18 @@ Enable time-averaged MSD computation in post-processing analysis scripts.
 By default, only the non-time-averaged (single t₀) MSD from the simulation logger is used. Use this flag to also compute time-averaged MSD from coordinate trajectories.
 Note: This flag causes coordinate trajectories to be stored in the JLD2 file (required for time-averaged computation).
 
-### Trajectory Export
+### Output Options
+
+**`--metrics-format`** (default: `jld2`)
+Output format for metrics (MSD, Rg): `jld2` or `csv`.
+- `jld2`: Store metrics in binary JLD2 format (compact, preserves full logger structure)
+- `csv`: Export metrics to separate CSV files (human-readable, easy to import in other tools)
+
+When using `csv` format, the following files are created:
+- `{params}_active_msd.csv` — MSD data (lag_time, msd_monomer, msd_com if enabled)
+- `{params}_active_rg.csv` — Rg data (time, Rg, Rg1, Rg2, Rg3)
+- `{params}_thermal_msd.csv` — same for thermal phase
+- `{params}_thermal_rg.csv` — same for thermal phase
 
 **`--export-xyz`**
 Export XYZ trajectory files for visualization (disabled by default).
@@ -209,16 +220,23 @@ Simulations create organized output in `_data/`:
 
 ### JLD2 Files (`_data/jld2/`)
 
-Binary data files containing:
-- Parameters
-- MSD data (non-time-averaged, from simulation logger)
-- Radius of gyration time series
-- Tangent vectors and activity flags
+Binary data files. Contents depend on `--metrics-format`:
+- With `--metrics-format jld2` (default): Parameters + all metric loggers (MSD, Rg, tangents)
+- With `--metrics-format csv`: Parameters only (metrics are in CSV files)
+
+Additional data stored in JLD2:
 - Coordinate trajectories (only if `--msd-time-averaged` is enabled)
 
 **Filename format**:
 - Single: `single_{n_monomers}_{n_active}_{kangle}_{factive}[_simid].jld2`
 - Double: `double_{n1}_{n2}_{nact1}_{nact2}_{kangle}_{factive}[_simid].jld2`
+
+### CSV Files (`_data/csv/`) — With `--metrics-format csv`
+
+Human-readable metric files:
+- `{params}_active_msd.csv` — MSD data with columns: lag_time, msd_monomer, msd_com (if enabled)
+- `{params}_active_rg.csv` — Rg data with columns: time, Rg, Rg1, Rg2, Rg3
+- `{params}_thermal_msd.csv`, `{params}_thermal_rg.csv` — same for thermal phase
 
 ### XYZ Trajectories (`_data/sims/`) — Optional
 
