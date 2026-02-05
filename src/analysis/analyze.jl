@@ -78,7 +78,7 @@ function analyze_simulation(filepath::String; phase::Symbol=:active, run_name::S
         println("\nAnalyzing single ring system...")
 
         results[:ring1] = analyze_ring(run_name, 1, coords, tangents,
-                                       params.dt, params.logger_steps;
+                                       params.dt, params.traj_interval;
                                        output_dir=output_dir)
 
     else  # :double
@@ -94,11 +94,11 @@ function analyze_simulation(filepath::String; phase::Symbol=:active, run_name::S
 
         # Analyze each ring
         results[:ring1] = analyze_ring(run_name, 1, coords1, tangents1,
-                                       params.dt, params.logger_steps;
+                                       params.dt, params.traj_interval;
                                        output_dir=output_dir)
 
         results[:ring2] = analyze_ring(run_name, 2, coords2, tangents2,
-                                       params.dt, params.logger_steps;
+                                       params.dt, params.traj_interval;
                                        output_dir=output_dir)
     end
 

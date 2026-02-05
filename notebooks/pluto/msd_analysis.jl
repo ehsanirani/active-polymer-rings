@@ -72,10 +72,15 @@ begin
         msd_monomer_avg = compute_msd(coords_history)
         msd_com_avg = compute_msd_com_timeaveraged(coords_history)
 
-        # Calculate lag times
+        # Calculate lag times — use step_indices if available (new format)
         dt = phase == :active ? params.dt : params.dt_thermal
-        time_interval = dt * params.logger_steps
-        lag_times_noavg = collect(1:length(msd_monomer_noavg)) .* time_interval
+        traj_int = hasproperty(params, :traj_interval) ? params.traj_interval : params.logger_steps
+        time_interval = dt * traj_int
+        if hasproperty(msd_logger, :step_indices) && !isempty(msd_logger.step_indices)
+            lag_times_noavg = msd_logger.step_indices .* dt
+        else
+            lag_times_noavg = collect(1:length(msd_monomer_noavg)) .* time_interval
+        end
         lag_times_avg = collect(1:length(msd_monomer_avg)) .* time_interval
 
         md"""

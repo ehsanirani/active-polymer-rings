@@ -55,10 +55,16 @@ function load_msd_from_file(filepath::String; phase::Symbol=:active)
     msd_monomer_avg = compute_msd(coords_history)
     msd_com_avg = compute_msd_com_timeaveraged(coords_history)
 
-    # Time arrays
+    # Time arrays — use step_indices if available, fall back to traj_interval
     dt = phase == :active ? params.dt : params.dt_thermal
-    time_interval = dt * params.logger_steps
-    lag_times = collect(1:length(msd_monomer)) .* time_interval
+    if hasproperty(msd_logger, :step_indices) && !isempty(msd_logger.step_indices)
+        lag_times = msd_logger.step_indices .* dt
+    else
+        # Fallback for old data files
+        traj_int = hasproperty(params, :traj_interval) ? params.traj_interval : params.logger_steps
+        time_interval = dt * traj_int
+        lag_times = collect(1:length(msd_monomer)) .* time_interval
+    end
 
     return (msd_monomer=msd_monomer,
             msd_com=msd_com,

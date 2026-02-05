@@ -43,8 +43,8 @@ function export_msd_to_csv(jld2_file::String; phase::Symbol=:active, output_dir:
 
     # Get simulation metadata
     dt = phase == :active ? params.dt : params.dt_thermal
-    logger_steps = params.logger_steps
-    time_interval = dt * logger_steps
+    traj_int = hasproperty(params, :traj_interval) ? params.traj_interval : params.logger_steps
+    time_interval = dt * traj_int
 
     # Extract run name from filename
     run_name = splitext(basename(jld2_file))[1]
@@ -66,7 +66,12 @@ function export_msd_to_csv(jld2_file::String; phase::Symbol=:active, output_dir:
     # Save non-time-averaged monomer MSD
     println("Saving non-time-averaged monomer MSD...")
     filename = joinpath(output_dir, "$(run_name)_MSD_monomer_noavg.csv")
-    lag_times = collect(1:length(msd_monomer_noavg)) .* time_interval
+    # Use step_indices for non-averaged lag times if available
+    if hasproperty(msd_logger, :step_indices) && !isempty(msd_logger.step_indices)
+        lag_times = msd_logger.step_indices .* dt
+    else
+        lag_times = collect(1:length(msd_monomer_noavg)) .* time_interval
+    end
 
     df = DataFrame(lag_time = lag_times, msd = format_values(msd_monomer_noavg))
     CSV.write(filename, df)

@@ -18,6 +18,7 @@ export SimBodies, Particle
 export create_bodies, create_neighbor_finder, create_initial_system
 export simulate_system, create_simulation
 export RgLogger, TangentLogger
+export make_logging_schedule
 export ActiveTangentForce, LangevinThermostat
 
 # Analysis exports
@@ -37,6 +38,7 @@ include(joinpath("forces", "langevin.jl"))
 
 # Utility functions
 include(joinpath("utils", "polymer.jl"))
+include(joinpath("utils", "logging_schedule.jl"))
 include(joinpath("utils", "loggers.jl"))
 
 # System builders

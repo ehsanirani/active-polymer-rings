@@ -96,20 +96,40 @@ end
 
 @testset "Loggers" begin
     @testset "RgLogger Creation" begin
+        schedule = make_logging_schedule(:fixed, 1000; fixed_interval=100)
         p1 = Parameters(system_type=:single, n_monomers=100)
-        logger1 = RgLogger(100, p1.system_type, 100)
+        logger1 = RgLogger(schedule, p1.system_type, Int64(100))
         @test logger1.system_type == :single
-        
+
         p2 = Parameters(system_type=:double, n_monomers_1=100, n_monomers_2=100)
-        logger2 = RgLogger(100, p2.system_type, p2.n_monomers_1, p2.n_monomers_2)
+        logger2 = RgLogger(schedule, p2.system_type, p2.n_monomers_1, p2.n_monomers_2)
         @test logger2.system_type == :double
         @test logger2.n_monomers_2 == 100
     end
-    
+
     @testset "TangentLogger Creation" begin
         p = Parameters(system_type=:single, n_monomers=100, n_active=20)
         logger = TangentLogger(100, p)
         @test logger.n_monomers_1 == 100
+    end
+end
+
+@testset "LoggingSchedule" begin
+    @testset "Fixed schedule" begin
+        s_fixed = make_logging_schedule(:fixed, 1000; fixed_interval=100)
+        @test s_fixed == [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+    end
+
+    @testset "Logspaced schedule" begin
+        s_log = make_logging_schedule(:logspaced, 100000; n_points=50)
+        @test s_log[1] == 1
+        @test s_log[end] == 100000
+        @test issorted(s_log)
+        @test length(s_log) == length(unique(s_log))
+    end
+
+    @testset "Invalid mode" begin
+        @test_throws ErrorException make_logging_schedule(:invalid, 1000)
     end
 end
 
@@ -121,7 +141,7 @@ end
             n_active=5,
             n_steps=100,
             thermal_steps=50,
-            logger_steps=10,
+            traj_interval=10,
             factive=1.0,
             kangle=0.0  # Use active force
         )
@@ -146,7 +166,7 @@ end
             n_active_2=2,
             n_steps=100,
             thermal_steps=50,
-            logger_steps=10,
+            traj_interval=10,
             factive=1.0,
             kangle=5.0  # Use angle potential
         )

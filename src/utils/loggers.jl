@@ -1,7 +1,8 @@
 export RgLogger, CoordinateLogger, TangentLogger, MSDLogger
 
 struct RgLogger
-    n_steps::Int64
+    log_steps::Set{Int64}
+    step_indices::Vector{Int64}
     system_type::Symbol
     n_monomers_1::Int64
     n_monomers_2::Int64
@@ -11,15 +12,16 @@ struct RgLogger
     Rg3::Vector{Float64}
 end
 
-function RgLogger(n_steps::Int64, system_type::Symbol, n_monomers_1::Int64, n_monomers_2::Int64=0)
-    RgLogger(n_steps, system_type, n_monomers_1, n_monomers_2,
+function RgLogger(schedule::Vector{Int}, system_type::Symbol, n_monomers_1::Int64, n_monomers_2::Int64=0)
+    RgLogger(Set{Int64}(schedule), Int64[], system_type, n_monomers_1, n_monomers_2,
              Float64[], Float64[], Float64[], Float64[])
 end
 
 function Molly.log_property!(logger::RgLogger, sys, buffers, neighbors=nothing, step_n::Integer=0; n_threads=Threads.nthreads(), kwargs...)
-    if step_n % logger.n_steps != 0
+    if !(step_n in logger.log_steps)
         return
     end
+    push!(logger.step_indices, step_n)
     
     if logger.system_type == :single
         unwrap_coords = unwrap_polymer(sys.coords[1:logger.n_monomers_1], sys.boundary)
@@ -78,7 +80,8 @@ Logger for computing non-time-averaged Mean-Squared Displacement during simulati
 Stores reference coordinates at initialization and computes MSD at each logging step.
 """
 struct MSDLogger
-    n_steps::Int64
+    log_steps::Set{Int64}
+    step_indices::Vector{Int64}
     system_type::Symbol
     n_monomers_1::Int64
     n_monomers_2::Int64
@@ -89,11 +92,11 @@ struct MSDLogger
 end
 
 """
-    MSDLogger(n_steps, system_type, n_monomers_1, n_monomers_2, initial_coords, boundary)
+    MSDLogger(schedule, system_type, n_monomers_1, n_monomers_2, initial_coords, boundary)
 
 Create MSDLogger with reference coordinates from the first frame.
 """
-function MSDLogger(n_steps::Int64, system_type::Symbol, n_monomers_1::Int64,
+function MSDLogger(schedule::Vector{Int}, system_type::Symbol, n_monomers_1::Int64,
                    n_monomers_2::Int64, initial_coords::Vector{SVector{3,Float64}},
                    boundary)
     # Store reference coordinates (unwrapped)
@@ -103,7 +106,7 @@ function MSDLogger(n_steps::Int64, system_type::Symbol, n_monomers_1::Int64,
     # Compute reference COM
     ref_com = sum(ref_coords) / length(ref_coords)
 
-    MSDLogger(n_steps, system_type, n_monomers_1, n_monomers_2,
+    MSDLogger(Set{Int64}(schedule), Int64[], system_type, n_monomers_1, n_monomers_2,
               ref_coords, ref_com, Float64[], Float64[])
 end
 
@@ -112,9 +115,10 @@ Log MSD values at each step.
 """
 function Molly.log_property!(logger::MSDLogger, sys, buffers, neighbors=nothing,
                              step_n::Integer=0; n_threads=1, kwargs...)
-    if step_n % logger.n_steps != 0
+    if !(step_n in logger.log_steps)
         return
     end
+    push!(logger.step_indices, step_n)
 
     n_total = logger.system_type == :single ? logger.n_monomers_1 :
               logger.n_monomers_1 + logger.n_monomers_2

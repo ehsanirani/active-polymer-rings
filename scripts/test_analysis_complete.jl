@@ -30,7 +30,8 @@ end
 println("  System: $(params.system_type)")
 println("  Ring 1: $(params.n_monomers_1) monomers, $(params.n_active_1) active")
 println("  Ring 2: $(params.n_monomers_2) monomers, $(params.n_active_2) active")
-println("  dt = $(params.dt), logger_steps = $(params.logger_steps)")
+traj_int = hasproperty(params, :traj_interval) ? params.traj_interval : traj_int
+println("  dt = $(params.dt), traj_interval = $(traj_int)")
 
 # Create output directories
 mkpath("_data/csv_legacy")
@@ -124,10 +125,10 @@ run_name = "test_legacy"
 # Process Ring 1
 println("\nProcessing Ring 1 (legacy)...")
 rg1_leg, rg2_leg, rg3_leg, rg_leg = create_Rgs_array(coords_ring1_legacy)
-save_legacy_rgs(run_name, 1, params.dt, params.logger_steps, rg_leg, rg1_leg, rg2_leg, rg3_leg)
+save_legacy_rgs(run_name, 1, params.dt, traj_int, rg_leg, rg1_leg, rg2_leg, rg3_leg)
 
 msd_leg = create_msd_array(coords_ring1_legacy)
-save_legacy_msd(run_name, 1, params.dt, params.logger_steps, msd_leg)
+save_legacy_msd(run_name, 1, params.dt, traj_int, msd_leg)
 
 Rs_leg = Rs(coords_ring1_legacy)
 save_legacy_rs(run_name, 1, Rs_leg)
@@ -140,10 +141,10 @@ println("  ✓ Ring 1 complete")
 # Process Ring 2
 println("Processing Ring 2 (legacy)...")
 rg1_leg2, rg2_leg2, rg3_leg2, rg_leg2 = create_Rgs_array(coords_ring2_legacy)
-save_legacy_rgs(run_name, 2, params.dt, params.logger_steps, rg_leg2, rg1_leg2, rg2_leg2, rg3_leg2)
+save_legacy_rgs(run_name, 2, params.dt, traj_int, rg_leg2, rg1_leg2, rg2_leg2, rg3_leg2)
 
 msd_leg2 = create_msd_array(coords_ring2_legacy)
-save_legacy_msd(run_name, 2, params.dt, params.logger_steps, msd_leg2)
+save_legacy_msd(run_name, 2, params.dt, traj_int, msd_leg2)
 
 Rs_leg2 = Rs(coords_ring2_legacy)
 save_legacy_rs(run_name, 2, Rs_leg2)

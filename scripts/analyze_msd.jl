@@ -21,11 +21,11 @@ function analyze_msd(jld2_file::String; phase::Symbol=:active)
 
     n_frames = length(coords_history)
     dt = phase == :active ? params.dt : params.dt_thermal
-    logger_steps = params.logger_steps
-    time_interval = dt * logger_steps
+    traj_int = hasproperty(params, :traj_interval) ? params.traj_interval : params.logger_steps
+    time_interval = dt * traj_int
 
     println("Number of frames: $n_frames")
-    println("Time interval between frames: $time_interval")
+    println("Trajectory time interval: $time_interval")
     println()
 
     # Get non-time-averaged MSD from logger (already computed)
@@ -38,8 +38,12 @@ function analyze_msd(jld2_file::String; phase::Symbol=:active)
     msd_monomer_avg = compute_msd(coords_history)
     msd_com_avg = compute_msd_com_timeaveraged(coords_history)
 
-    # Time arrays
-    lag_times = collect(1:length(msd_monomer)) .* time_interval
+    # Time arrays — use step_indices for non-averaged if available
+    if hasproperty(msd_logger, :step_indices) && !isempty(msd_logger.step_indices)
+        lag_times = msd_logger.step_indices .* dt
+    else
+        lag_times = collect(1:length(msd_monomer)) .* time_interval
+    end
     lag_times_avg = collect(1:length(msd_monomer_avg)) .* time_interval
 
     # Display results

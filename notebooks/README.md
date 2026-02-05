@@ -170,10 +170,14 @@ msd_com_noavg = msd_logger.msd_com
 msd_monomer_avg = compute_msd(coords_history)
 msd_com_avg = compute_msd_com_timeaveraged(coords_history)
 
-# Calculate lag times
+# Calculate lag times — use step_indices for non-averaged (supports logspaced)
 dt = params.dt
-time_interval = dt * params.logger_steps
-lag_times = collect(1:length(msd_monomer_noavg)) .* time_interval
+if hasproperty(msd_logger, :step_indices) && !isempty(msd_logger.step_indices)
+    lag_times = msd_logger.step_indices .* dt
+else
+    traj_int = hasproperty(params, :traj_interval) ? params.traj_interval : params.logger_steps
+    lag_times = collect(1:length(msd_monomer_noavg)) .* (dt * traj_int)
+end
 ```
 
 ### From CSV Files

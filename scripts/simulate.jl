@@ -91,12 +91,29 @@ function parse_commandline()
             default = 200_000
             dest_name = "thermal_steps"
 
-        "--logger-steps"
-            help = "Logging frequency"
+        "--traj-interval"
+            help = "Trajectory logger interval (coords, tangents)"
             arg_type = Int
             default = 500
-            dest_name = "logger_steps"
-            
+            dest_name = "traj_interval"
+
+        "--metric-mode"
+            help = "Logging mode for metric loggers (MSD, Rg): fixed or logspaced"
+            default = "fixed"
+            dest_name = "metric_mode"
+
+        "--metric-interval"
+            help = "Fixed interval for metric loggers; 0 = same as --traj-interval"
+            arg_type = Int
+            default = 0
+            dest_name = "metric_interval"
+
+        "--metric-npoints"
+            help = "Number of sampling points for logspaced metric logging"
+            arg_type = Int
+            default = 1000
+            dest_name = "metric_npoints"
+
         "--L"
             help = "Box size (0 to auto-calculate)"
             arg_type = Float64
@@ -143,7 +160,7 @@ function init_energy_minimization(params::Parameters, sim_bodies::SimBodies; rcu
         return sim_bodies, nothing
     end
     
-    loggers = Dict("coords" => Molly.CoordinatesLogger(Float64, params.logger_steps; dims=3))
+    loggers = Dict("coords" => Molly.CoordinatesLogger(Float64, params.traj_interval; dims=3))
     sim_bodies.neighbor_finder = create_neighbor_finder(sim_bodies.coords, rcut_nf)
     
     # Use soft sphere system for minimization
@@ -226,15 +243,21 @@ function run_thermalization(params::Parameters, sim_bodies::SimBodies; rcut_nf::
     n_particles = get_n_particles(params)
 
     # Create progress bar
-    progress_logger = ProgressLogger(params.logger_steps, params.thermal_steps, "Thermalization")
+    progress_logger = ProgressLogger(params.traj_interval, params.thermal_steps, "Thermalization")
+
+    # Compute metric logging schedule for this phase
+    metric_schedule = make_logging_schedule(
+        params.metric_mode, params.thermal_steps;
+        fixed_interval=params.metric_interval, n_points=params.metric_npoints
+    )
 
     loggers = Dict(
-        "coords" => Molly.CoordinatesLogger(Float64, params.logger_steps; dims=3),
-        "rg" => RgLogger(params.logger_steps, params.system_type,
+        "coords" => Molly.CoordinatesLogger(Float64, params.traj_interval; dims=3),
+        "rg" => RgLogger(metric_schedule, params.system_type,
                           params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                           params.system_type == :single ? 0 : params.n_monomers_2),
-        "tangents" => TangentLogger(params.logger_steps, params),
-        "msd" => MSDLogger(params.logger_steps, params.system_type,
+        "tangents" => TangentLogger(params.traj_interval, params),
+        "msd" => MSDLogger(metric_schedule, params.system_type,
                            params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                            params.system_type == :single ? 0 : params.n_monomers_2,
                            sim_bodies.coords, sim_bodies.boundary),
@@ -264,15 +287,21 @@ end
 
 function run_active_dynamics(params::Parameters, sim_bodies::SimBodies; rcut_nf::Float64=2.0)
     # Create progress bar
-    progress_logger = ProgressLogger(params.logger_steps, params.n_steps, "Active Dynamics")
+    progress_logger = ProgressLogger(params.traj_interval, params.n_steps, "Active Dynamics")
+
+    # Compute metric logging schedule for this phase
+    metric_schedule = make_logging_schedule(
+        params.metric_mode, params.n_steps;
+        fixed_interval=params.metric_interval, n_points=params.metric_npoints
+    )
 
     loggers = Dict(
-        "coords" => Molly.CoordinatesLogger(Float64, params.logger_steps; dims=3),
-        "rg" => RgLogger(params.logger_steps, params.system_type,
+        "coords" => Molly.CoordinatesLogger(Float64, params.traj_interval; dims=3),
+        "rg" => RgLogger(metric_schedule, params.system_type,
                           params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                           params.system_type == :single ? 0 : params.n_monomers_2),
-        "tangents" => TangentLogger(params.logger_steps, params),
-        "msd" => MSDLogger(params.logger_steps, params.system_type,
+        "tangents" => TangentLogger(params.traj_interval, params),
+        "msd" => MSDLogger(metric_schedule, params.system_type,
                            params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                            params.system_type == :single ? 0 : params.n_monomers_2,
                            sim_bodies.coords, sim_bodies.boundary),
@@ -384,7 +413,10 @@ function main(args=ARGS)
             dt_thermal=parsed[:dt_thermal],
             n_steps=parsed[:n_steps],
             thermal_steps=parsed[:thermal_steps],
-            logger_steps=parsed[:logger_steps],
+            traj_interval=parsed[:traj_interval],
+            metric_mode=Symbol(parsed[:metric_mode]),
+            metric_interval=parsed[:metric_interval],
+            metric_npoints=parsed[:metric_npoints],
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],
@@ -405,7 +437,10 @@ function main(args=ARGS)
             dt_thermal=parsed[:dt_thermal],
             n_steps=parsed[:n_steps],
             thermal_steps=parsed[:thermal_steps],
-            logger_steps=parsed[:logger_steps],
+            traj_interval=parsed[:traj_interval],
+            metric_mode=Symbol(parsed[:metric_mode]),
+            metric_interval=parsed[:metric_interval],
+            metric_npoints=parsed[:metric_npoints],
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],

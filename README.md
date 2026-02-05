@@ -98,9 +98,27 @@ Typical range: 10⁵ - 10⁷ steps. This is your main data collection period aft
 Number of timesteps for thermalization (equilibration) before turning on active forces.
 Allows the system to relax to a typical equilibrium configuration. Typical: 10⁴ - 10⁶ steps.
 
-**`--logger-steps`** (default: 500)
-Data logging frequency. Coordinates and observables are saved every N steps.
+**`--traj-interval`** (default: 500)
+Trajectory logging interval. Coordinates and tangent vectors are saved every N steps.
 Lower values = more frequent logging = larger output files. Higher values = less temporal resolution.
+
+### Metric Logging
+
+Metric loggers (MSD, Rg) can run on a separate schedule from trajectory loggers (coordinates, tangents). This is useful for capturing early-time dynamics with logarithmic spacing while keeping trajectory files manageable.
+
+**`--metric-mode`** (default: `fixed`)
+Logging mode for metric loggers (MSD, Rg): `fixed` or `logspaced`.
+- `fixed`: Metrics logged at regular intervals (same behavior as trajectory loggers)
+- `logspaced`: Metrics logged at logarithmically spaced steps, providing dense sampling at early times and sparse sampling at late times
+
+**`--metric-interval`** (default: 0)
+Fixed interval for metric loggers. Only used when `--metric-mode fixed`.
+- `0`: Use the same interval as `--traj-interval`
+- Any positive integer: Use this interval instead
+
+**`--metric-npoints`** (default: 1000)
+Number of sampling points for logarithmically spaced metric logging. Only used when `--metric-mode logspaced`.
+Higher values give denser temporal sampling.
 
 ### Advanced Options
 
@@ -156,7 +174,15 @@ julia --project=. scripts/simulate.jl --system double \
 ```bash
 julia --project=. scripts/simulate.jl --system single \
   --n-monomers 50 --n-active 10 --fact 2.0 \
-  --n-steps 10000 --thermal-steps 5000 --logger-steps 100
+  --n-steps 10000 --thermal-steps 5000 --traj-interval 100
+```
+
+**Log-spaced metrics for long simulation**
+```bash
+julia --project=. scripts/simulate.jl --system single \
+  --n-monomers 100 --n-active 50 --fact 5.0 \
+  --n-steps 10000000 --traj-interval 5000 \
+  --metric-mode logspaced --metric-npoints 2000
 ```
 
 ## Output Files

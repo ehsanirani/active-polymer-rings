@@ -28,7 +28,8 @@ end
 
 println("  System: $(params.system_type)")
 println("  Monomers: $(params.n_monomers), Active: $(params.n_active)")
-println("  dt = $(params.dt), logger_steps = $(params.logger_steps)")
+traj_int = hasproperty(params, :traj_interval) ? params.traj_interval : params.logger_steps
+println("  dt = $(params.dt), traj_interval = $(traj_int)")
 
 # Create output directories
 mkpath("_data/csv_legacy_single")
@@ -99,10 +100,10 @@ run_name = "test_legacy"
 
 println("Processing single ring (legacy)...")
 rg1_leg, rg2_leg, rg3_leg, rg_leg = create_Rgs_array(coords_active)
-save_legacy_rgs(run_name, 1, params.dt, params.logger_steps, rg_leg, rg1_leg, rg2_leg, rg3_leg)
+save_legacy_rgs(run_name, 1, params.dt, traj_int, rg_leg, rg1_leg, rg2_leg, rg3_leg)
 
 msd_leg = create_msd_array(coords_active)
-save_legacy_msd(run_name, 1, params.dt, params.logger_steps, msd_leg)
+save_legacy_msd(run_name, 1, params.dt, traj_int, msd_leg)
 
 Rs_leg = Rs(coords_active)
 save_legacy_rs(run_name, 1, Rs_leg)
