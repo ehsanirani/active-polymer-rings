@@ -34,33 +34,22 @@ julia --project=. scripts/simulate.jl --system double \
 Instead of passing many CLI arguments, you can use a TOML config file:
 
 ```bash
-# Use a config file
-julia --project=. scripts/simulate.jl --config config/example_active_ring.toml
+# Use a config file for single ring
+julia --project=. scripts/simulate.jl --config config/single_ring.toml
+
+# Use a config file for double ring
+julia --project=. scripts/simulate.jl --config config/double_ring.toml
 
 # Override specific values from config
-julia --project=. scripts/simulate.jl --config config/example_active_ring.toml --n-active 30
+julia --project=. scripts/simulate.jl --config config/single_ring.toml --n-active 30
 
 # CLI arguments always override config file values
 ```
 
-Config files are stored in the `config/` folder. See `config/default.toml` for all available options.
-
-**Example config file (`config/example_quick_test.toml`):**
-```toml
-[system]
-type = "single"
-
-[single_ring]
-n_monomers = 50
-n_active = 10
-
-[physics]
-factive = 2.0
-
-[simulation]
-n_steps = 10000
-thermal_steps = 5000
-```
+Config files are stored in the `config/` folder:
+- `config/single_ring.toml` — Complete config for single ring simulations
+- `config/double_ring.toml` — Complete config for double (catenated) ring simulations
+- `config/default.toml` — Reference with all available options
 
 ### Priority Order
 1. CLI arguments (highest priority)
