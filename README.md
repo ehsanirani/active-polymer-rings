@@ -122,13 +122,13 @@ Higher values give denser temporal sampling.
 
 ### MSD Options
 
-**`--no-msd-com`**
-Disable center-of-mass MSD computation during simulation and analysis.
-By default, both monomer MSD and COM MSD are computed. Use this flag to skip COM MSD if you only need monomer-level displacement data.
+**`--msd-com`**
+Enable center-of-mass MSD computation during simulation and analysis.
+By default, only monomer MSD is computed. Use this flag to also compute COM MSD.
 
-**`--no-msd-time-averaged`**
-Disable time-averaged MSD computation in post-processing analysis scripts.
-By default, time-averaged MSD is computed from coordinate trajectories. Use this flag to skip this computation if you only need the non-time-averaged (single t₀) MSD from the simulation logger.
+**`--msd-time-averaged`**
+Enable time-averaged MSD computation in post-processing analysis scripts.
+By default, only the non-time-averaged (single t₀) MSD from the simulation logger is used. Use this flag to also compute time-averaged MSD from coordinate trajectories.
 
 ### Advanced Options
 

@@ -44,7 +44,7 @@ function Parameters(; system_type::Symbol=:single,
                    KT=1.0, mass=1.0, kbond=30.0, kangle=0.0, factive=1.0,
                    dt=0.01, dt_thermal=0.0, n_steps=100_000, thermal_steps=100_000,
                    traj_interval=500, metric_mode=:fixed, metric_interval=0, metric_npoints=1000,
-                   msd_com=true, msd_time_averaged=true,
+                   msd_com=false, msd_time_averaged=false,
                    L=0.0, nthreads=0, γ=2.0, rcut_nf=2.0,
                    # Single ring
                    n_monomers=100, n_active=0,

@@ -164,7 +164,7 @@ close(data)
 
 # Non-time-averaged MSD (already computed during simulation)
 msd_monomer_noavg = msd_logger.msd_monomer
-msd_com_noavg = msd_logger.msd_com  # may be empty if --no-msd-com was used
+msd_com_noavg = msd_logger.msd_com  # may be empty unless --msd-com was used
 
 # Check flags (backward-compatible with old data files)
 do_com = hasproperty(params, :msd_com) ? params.msd_com : true

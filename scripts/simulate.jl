@@ -114,15 +114,15 @@ function parse_commandline()
             default = 1000
             dest_name = "metric_npoints"
 
-        "--no-msd-com"
-            help = "Disable center-of-mass MSD computation"
+        "--msd-com"
+            help = "Enable center-of-mass MSD computation (disabled by default)"
             action = :store_true
-            dest_name = "no_msd_com"
+            dest_name = "msd_com"
 
-        "--no-msd-time-averaged"
-            help = "Disable time-averaged MSD computation in analysis"
+        "--msd-time-averaged"
+            help = "Enable time-averaged MSD computation in analysis (disabled by default)"
             action = :store_true
-            dest_name = "no_msd_time_averaged"
+            dest_name = "msd_time_averaged"
 
         "--L"
             help = "Box size (0 to auto-calculate)"
@@ -429,8 +429,8 @@ function main(args=ARGS)
             metric_mode=Symbol(parsed[:metric_mode]),
             metric_interval=parsed[:metric_interval],
             metric_npoints=parsed[:metric_npoints],
-            msd_com=!parsed[:no_msd_com],
-            msd_time_averaged=!parsed[:no_msd_time_averaged],
+            msd_com=parsed[:msd_com],
+            msd_time_averaged=parsed[:msd_time_averaged],
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],
@@ -455,8 +455,8 @@ function main(args=ARGS)
             metric_mode=Symbol(parsed[:metric_mode]),
             metric_interval=parsed[:metric_interval],
             metric_npoints=parsed[:metric_npoints],
-            msd_com=!parsed[:no_msd_com],
-            msd_time_averaged=!parsed[:no_msd_time_averaged],
+            msd_com=parsed[:msd_com],
+            msd_time_averaged=parsed[:msd_time_averaged],
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],

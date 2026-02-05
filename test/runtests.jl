@@ -46,16 +46,16 @@ using StaticArrays: SVector
         @test p2.dt_thermal == 0.02  # Should use specified value
     end
 
-    @testset "MSD flags default to true" begin
+    @testset "MSD flags default to false" begin
         p = Parameters(system_type=:single, n_monomers=100)
-        @test p.msd_com == true
-        @test p.msd_time_averaged == true
-    end
-
-    @testset "MSD flags can be disabled" begin
-        p = Parameters(system_type=:single, n_monomers=100, msd_com=false, msd_time_averaged=false)
         @test p.msd_com == false
         @test p.msd_time_averaged == false
+    end
+
+    @testset "MSD flags can be enabled" begin
+        p = Parameters(system_type=:single, n_monomers=100, msd_com=true, msd_time_averaged=true)
+        @test p.msd_com == true
+        @test p.msd_time_averaged == true
     end
 end
 
