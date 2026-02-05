@@ -1,0 +1,197 @@
+# =============================================================================
+# ActiveRings Configuration: Single Polymer Ring
+# =============================================================================
+#
+# Usage:
+#   julia --project=. scripts/simulate.jl --config config/single_ring.toml
+#
+# CLI arguments override config values:
+#   julia --project=. scripts/simulate.jl --config config/single_ring.toml --n-active 30
+#
+# =============================================================================
+
+[system]
+# System type: "single" for one polymer ring, "double" for two catenated rings
+type = "single"
+
+# =============================================================================
+# RING CONFIGURATION
+# =============================================================================
+
+[single_ring]
+# Number of monomers in the polymer ring
+# Typical range: 50-500
+# Larger values increase computational cost but allow studying longer-wavelength
+# fluctuations and more realistic polymer behavior
+n_monomers = 100
+
+# Number of active (self-propelled) monomers
+# Range: 0 to n_monomers
+#   0              : Purely passive polymer (equilibrium dynamics)
+#   10-50          : Partially active system with mixed dynamics
+#   = n_monomers   : Fully active ring
+n_active = 0
+
+# =============================================================================
+# PHYSICS PARAMETERS
+# =============================================================================
+
+[physics]
+# Active force magnitude applied to active monomers along their local tangent
+# The ratio factive/KT determines whether activity or thermal fluctuations dominate
+# Typical range: 0.1 - 10.0
+factive = 1.0
+
+# Angle bending rigidity constant (energy units)
+# Controls polymer stiffness via a cosine angle potential
+#   0.0  : Fully flexible chain
+#   > 0  : Semi-flexible chain (higher = stiffer)
+# Typical range: 0.0 - 10.0
+kangle = 0.0
+
+# Bond spring constant for FENE bonds connecting monomers (energy units)
+# Controls bond stiffness in the finitely extensible nonlinear elastic potential
+# Default 30.0 is standard for polymer simulations
+kbond = 30.0
+
+# Thermal energy / temperature (energy units)
+# All other energies are measured relative to this value
+# Increasing KT enhances thermal fluctuations
+# Key ratio: factive/KT determines balance between active forcing and thermal noise
+KT = 1.0
+
+# Damping coefficient / friction (inverse time units)
+# Controls momentum relaxation timescales in Langevin dynamics
+# Affects dynamics at short times
+# Typical range: 1.0 - 10.0
+gamma = 2.0
+
+# =============================================================================
+# SIMULATION CONTROL
+# =============================================================================
+
+[simulation]
+# Integration timestep for active dynamics phase (time units)
+# Uses Velocity Verlet algorithm
+# Must be small enough for numerical stability (typically dt < 0.1)
+# If simulation crashes or shows instabilities, decrease this value
+dt = 0.01
+
+# Integration timestep for thermalization phase (time units)
+# Set to 0 to use the same value as dt
+# You may use a larger timestep during thermalization for faster equilibration
+# since there are no active forces that might require smaller timesteps
+dt_thermal = 0.0
+
+# Number of timesteps for active dynamics phase (production run)
+# This is your main data collection period after equilibration
+# Typical range: 10^5 - 10^7 steps
+n_steps = 1000000
+
+# Number of timesteps for thermalization (equilibration)
+# Allows the system to relax to a typical equilibrium configuration
+# before turning on active forces
+# Typical range: 10^4 - 10^6 steps
+thermal_steps = 200000
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+
+[logging]
+# Trajectory logging interval (coordinates and tangent vectors)
+# Lower values = more frequent logging = larger output files
+# Higher values = less temporal resolution
+# Coordinates are saved every traj_interval steps
+traj_interval = 500
+
+# Logging mode for metric loggers (MSD, Rg): "fixed" or "logspaced"
+#   "fixed"     : Metrics logged at regular intervals (same behavior as trajectory)
+#   "logspaced" : Metrics logged at logarithmically spaced steps
+#                 Dense sampling at early times, sparse at late times
+#                 Useful for capturing early-time ballistic regime
+metric_mode = "fixed"
+
+# Fixed interval for metric loggers (only used when metric_mode = "fixed")
+# Set to 0 to use the same interval as traj_interval
+# Any positive integer uses that interval instead
+metric_interval = 0
+
+# Number of sampling points for log-spaced metric logging
+# Only used when metric_mode = "logspaced"
+# Higher values give denser temporal sampling
+metric_npoints = 1000
+
+# =============================================================================
+# MSD OPTIONS
+# =============================================================================
+
+[msd]
+# Enable center-of-mass MSD computation
+# By default, only monomer MSD is computed
+# Set to true to also compute COM MSD
+compute_com = false
+
+# Enable time-averaged MSD computation in post-processing
+# By default, only non-time-averaged (single t0) MSD from simulation logger is used
+# When true, coordinate trajectories are stored in JLD2 (required for time-averaging)
+# Note: This increases JLD2 file size significantly
+time_averaged = false
+
+# =============================================================================
+# OUTPUT OPTIONS
+# =============================================================================
+
+[output]
+# Export XYZ trajectory files for visualization
+# Creates {params}_thermal.xyz and {params}_active.xyz in _data/sims/
+# Compatible with: OVITO, VMD, ASE, MDAnalysis
+# Set to true when you need trajectories for visualization
+export_xyz = false
+
+# Output format for metrics (MSD, Rg): "jld2" or "csv"
+#   "jld2" : Store metrics in binary JLD2 format (compact, preserves full structure)
+#   "csv"  : Export metrics to separate CSV files (human-readable, easy to import)
+# When using csv, creates: {params}_active_msd.csv, {params}_active_rg.csv, etc.
+metrics_format = "jld2"
+
+# =============================================================================
+# ACTIVITY PATTERN
+# =============================================================================
+
+[activity]
+# Distribution of active monomers along the polymer chain: "random" or "block"
+#   "random" : Active monomers randomly distributed (shuffled)
+#   "block"  : Active monomers form a contiguous block starting from monomer 1
+pattern = "random"
+
+# =============================================================================
+# ADVANCED OPTIONS
+# =============================================================================
+
+[advanced]
+# Periodic boundary box side length (length units)
+# Set to 0 for auto-calculation based on polymer size: L = 3.0 * n^0.5887
+# Manual value should ensure L > 2 * Rg (twice the radius of gyration)
+# to avoid self-interactions through periodic boundaries
+L = 0.0
+
+# Cutoff distance for neighbor list construction (length units)
+# Optimization for pairwise interactions
+# Usually no need to change; must be larger than soft-sphere interaction range
+rcut_neighbor_finder = 2.0
+
+# Number of CPU threads for parallel force calculations
+# Limited speedup for small systems
+# Consider using for n_monomers > 500
+nthreads = 1
+
+# Skip initial energy minimization step
+# By default, steepest descent minimization removes bad contacts
+# Only set to true if continuing from a pre-equilibrated configuration
+no_minimize = false
+
+# Simulation identifier appended to output filenames
+# Useful for parameter sweeps or multiple replicates
+# Example: simid = "run01" creates files like single_100_10_0.0_1.0_run01.jld2
+simid = ""
