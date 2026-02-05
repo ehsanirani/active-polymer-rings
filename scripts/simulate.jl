@@ -114,6 +114,16 @@ function parse_commandline()
             default = 1000
             dest_name = "metric_npoints"
 
+        "--no-msd-com"
+            help = "Disable center-of-mass MSD computation"
+            action = :store_true
+            dest_name = "no_msd_com"
+
+        "--no-msd-time-averaged"
+            help = "Disable time-averaged MSD computation in analysis"
+            action = :store_true
+            dest_name = "no_msd_time_averaged"
+
         "--L"
             help = "Box size (0 to auto-calculate)"
             arg_type = Float64
@@ -260,7 +270,8 @@ function run_thermalization(params::Parameters, sim_bodies::SimBodies; rcut_nf::
         "msd" => MSDLogger(metric_schedule, params.system_type,
                            params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                            params.system_type == :single ? 0 : params.n_monomers_2,
-                           sim_bodies.coords, sim_bodies.boundary),
+                           sim_bodies.coords, sim_bodies.boundary;
+                           compute_com=params.msd_com),
         "progress" => progress_logger
     )
 
@@ -304,7 +315,8 @@ function run_active_dynamics(params::Parameters, sim_bodies::SimBodies; rcut_nf:
         "msd" => MSDLogger(metric_schedule, params.system_type,
                            params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                            params.system_type == :single ? 0 : params.n_monomers_2,
-                           sim_bodies.coords, sim_bodies.boundary),
+                           sim_bodies.coords, sim_bodies.boundary;
+                           compute_com=params.msd_com),
         "progress" => progress_logger
     )
 
@@ -417,6 +429,8 @@ function main(args=ARGS)
             metric_mode=Symbol(parsed[:metric_mode]),
             metric_interval=parsed[:metric_interval],
             metric_npoints=parsed[:metric_npoints],
+            msd_com=!parsed[:no_msd_com],
+            msd_time_averaged=!parsed[:no_msd_time_averaged],
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],
@@ -441,6 +455,8 @@ function main(args=ARGS)
             metric_mode=Symbol(parsed[:metric_mode]),
             metric_interval=parsed[:metric_interval],
             metric_npoints=parsed[:metric_npoints],
+            msd_com=!parsed[:no_msd_com],
+            msd_time_averaged=!parsed[:no_msd_time_averaged],
             L=parsed[:L],
             γ=parsed[:γ],
             KT=parsed[:KT],

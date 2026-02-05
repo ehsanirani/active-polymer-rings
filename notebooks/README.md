@@ -164,11 +164,15 @@ close(data)
 
 # Non-time-averaged MSD (already computed during simulation)
 msd_monomer_noavg = msd_logger.msd_monomer
-msd_com_noavg = msd_logger.msd_com
+msd_com_noavg = msd_logger.msd_com  # may be empty if --no-msd-com was used
 
-# Compute time-averaged MSD
-msd_monomer_avg = compute_msd(coords_history)
-msd_com_avg = compute_msd_com_timeaveraged(coords_history)
+# Check flags (backward-compatible with old data files)
+do_com = hasproperty(params, :msd_com) ? params.msd_com : true
+do_timeavg = hasproperty(params, :msd_time_averaged) ? params.msd_time_averaged : true
+
+# Compute time-averaged MSD (if enabled)
+msd_monomer_avg = do_timeavg ? compute_msd(coords_history) : Float64[]
+msd_com_avg = (do_timeavg && do_com) ? compute_msd_com_timeaveraged(coords_history) : Float64[]
 
 # Calculate lag times — use step_indices for non-averaged (supports logspaced)
 dt = params.dt

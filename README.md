@@ -120,6 +120,16 @@ Fixed interval for metric loggers. Only used when `--metric-mode fixed`.
 Number of sampling points for logarithmically spaced metric logging. Only used when `--metric-mode logspaced`.
 Higher values give denser temporal sampling.
 
+### MSD Options
+
+**`--no-msd-com`**
+Disable center-of-mass MSD computation during simulation and analysis.
+By default, both monomer MSD and COM MSD are computed. Use this flag to skip COM MSD if you only need monomer-level displacement data.
+
+**`--no-msd-time-averaged`**
+Disable time-averaged MSD computation in post-processing analysis scripts.
+By default, time-averaged MSD is computed from coordinate trajectories. Use this flag to skip this computation if you only need the non-time-averaged (single t₀) MSD from the simulation logger.
+
 ### Advanced Options
 
 **`--L`** (default: 0.0) — *Length units*

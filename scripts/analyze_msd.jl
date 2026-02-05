@@ -28,15 +28,25 @@ function analyze_msd(jld2_file::String; phase::Symbol=:active)
     println("Trajectory time interval: $time_interval")
     println()
 
+    # Check flags (with backward-compatible defaults)
+    do_com = hasproperty(params, :msd_com) ? params.msd_com : true
+    do_timeavg = hasproperty(params, :msd_time_averaged) ? params.msd_time_averaged : true
+
     # Get non-time-averaged MSD from logger (already computed)
     println("Loading non-time-averaged MSD from simulation...")
     msd_monomer = msd_logger.msd_monomer
     msd_com = msd_logger.msd_com
 
-    # Compute time-averaged MSD (post-processing)
-    println("Computing time-averaged MSD...")
-    msd_monomer_avg = compute_msd(coords_history)
-    msd_com_avg = compute_msd_com_timeaveraged(coords_history)
+    # Compute time-averaged MSD (post-processing, if enabled)
+    msd_monomer_avg = Float64[]
+    msd_com_avg = Float64[]
+    if do_timeavg
+        println("Computing time-averaged MSD...")
+        msd_monomer_avg = compute_msd(coords_history)
+        if do_com
+            msd_com_avg = compute_msd_com_timeaveraged(coords_history)
+        end
+    end
 
     # Time arrays — use step_indices for non-averaged if available
     if hasproperty(msd_logger, :step_indices) && !isempty(msd_logger.step_indices)
@@ -44,15 +54,21 @@ function analyze_msd(jld2_file::String; phase::Symbol=:active)
     else
         lag_times = collect(1:length(msd_monomer)) .* time_interval
     end
-    lag_times_avg = collect(1:length(msd_monomer_avg)) .* time_interval
+    lag_times_avg = do_timeavg ? collect(1:length(msd_monomer_avg)) .* time_interval : Float64[]
 
     # Display results
     println("\nResults Summary:")
     println("-"^70)
     println("Non-averaged MSD (monomers) at max lag: $(msd_monomer[end])")
-    println("Non-averaged MSD (COM) at max lag: $(msd_com[end])")
-    println("Time-averaged MSD (monomers) at max lag: $(msd_monomer_avg[end])")
-    println("Time-averaged MSD (COM) at max lag: $(msd_com_avg[end])")
+    if do_com && !isempty(msd_com)
+        println("Non-averaged MSD (COM) at max lag: $(msd_com[end])")
+    end
+    if do_timeavg && !isempty(msd_monomer_avg)
+        println("Time-averaged MSD (monomers) at max lag: $(msd_monomer_avg[end])")
+        if do_com && !isempty(msd_com_avg)
+            println("Time-averaged MSD (COM) at max lag: $(msd_com_avg[end])")
+        end
+    end
 
     # Plot
     p1 = plot(lag_times, msd_monomer,
@@ -60,12 +76,17 @@ function analyze_msd(jld2_file::String; phase::Symbol=:active)
               xlabel="Lag time", ylabel="MSD",
               title="Mean-Squared Displacement",
               linewidth=2, legend=:topleft)
-    plot!(p1, lag_times, msd_com,
-          label="COM (single t₀)", linewidth=2)
-    plot!(p1, lag_times_avg, msd_monomer_avg,
-          label="Monomers (time-avg)", linewidth=2, linestyle=:dash)
-    plot!(p1, lag_times_avg, msd_com_avg,
-          label="COM (time-avg)", linewidth=2, linestyle=:dash)
+    if do_com && !isempty(msd_com)
+        plot!(p1, lag_times, msd_com, label="COM (single t₀)", linewidth=2)
+    end
+    if do_timeavg && !isempty(msd_monomer_avg)
+        plot!(p1, lag_times_avg, msd_monomer_avg,
+              label="Monomers (time-avg)", linewidth=2, linestyle=:dash)
+        if do_com && !isempty(msd_com_avg)
+            plot!(p1, lag_times_avg, msd_com_avg,
+                  label="COM (time-avg)", linewidth=2, linestyle=:dash)
+        end
+    end
 
     # Log-log plot
     p2 = plot(lag_times, msd_monomer,
@@ -74,12 +95,17 @@ function analyze_msd(jld2_file::String; phase::Symbol=:active)
               title="MSD (log-log)",
               linewidth=2, legend=:topleft,
               xscale=:log10, yscale=:log10)
-    plot!(p2, lag_times, msd_com,
-          label="COM (single t₀)", linewidth=2)
-    plot!(p2, lag_times_avg, msd_monomer_avg,
-          label="Monomers (time-avg)", linewidth=2, linestyle=:dash)
-    plot!(p2, lag_times_avg, msd_com_avg,
-          label="COM (time-avg)", linewidth=2, linestyle=:dash)
+    if do_com && !isempty(msd_com)
+        plot!(p2, lag_times, msd_com, label="COM (single t₀)", linewidth=2)
+    end
+    if do_timeavg && !isempty(msd_monomer_avg)
+        plot!(p2, lag_times_avg, msd_monomer_avg,
+              label="Monomers (time-avg)", linewidth=2, linestyle=:dash)
+        if do_com && !isempty(msd_com_avg)
+            plot!(p2, lag_times_avg, msd_com_avg,
+                  label="COM (time-avg)", linewidth=2, linestyle=:dash)
+        end
+    end
 
     plot(p1, p2, layout=(1,2), size=(1200, 500))
 

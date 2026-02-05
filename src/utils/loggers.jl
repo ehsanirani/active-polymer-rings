@@ -82,6 +82,7 @@ Stores reference coordinates at initialization and computes MSD at each logging 
 struct MSDLogger
     log_steps::Set{Int64}
     step_indices::Vector{Int64}
+    compute_com::Bool                              # whether to compute COM MSD
     system_type::Symbol
     n_monomers_1::Int64
     n_monomers_2::Int64
@@ -92,21 +93,22 @@ struct MSDLogger
 end
 
 """
-    MSDLogger(schedule, system_type, n_monomers_1, n_monomers_2, initial_coords, boundary)
+    MSDLogger(schedule, system_type, n_monomers_1, n_monomers_2, initial_coords, boundary;
+              compute_com=true)
 
 Create MSDLogger with reference coordinates from the first frame.
 """
 function MSDLogger(schedule::Vector{Int}, system_type::Symbol, n_monomers_1::Int64,
                    n_monomers_2::Int64, initial_coords::Vector{SVector{3,Float64}},
-                   boundary)
+                   boundary; compute_com::Bool=true)
     # Store reference coordinates (unwrapped)
     n_total = system_type == :single ? n_monomers_1 : n_monomers_1 + n_monomers_2
     ref_coords = unwrap_polymer(initial_coords[1:n_total], boundary)
 
     # Compute reference COM
-    ref_com = sum(ref_coords) / length(ref_coords)
+    ref_com = compute_com ? sum(ref_coords) / length(ref_coords) : SVector{3,Float64}(0, 0, 0)
 
-    MSDLogger(Set{Int64}(schedule), Int64[], system_type, n_monomers_1, n_monomers_2,
+    MSDLogger(Set{Int64}(schedule), Int64[], compute_com, system_type, n_monomers_1, n_monomers_2,
               ref_coords, ref_com, Float64[], Float64[])
 end
 
@@ -131,11 +133,13 @@ function Molly.log_property!(logger::MSDLogger, sys, buffers, neighbors=nothing,
     msd_mon = sum(d -> dot(d, d), diff) / length(diff)
     push!(logger.msd_monomer, msd_mon)
 
-    # Compute COM MSD
-    current_com = sum(current_coords) / length(current_coords)
-    com_diff = current_com - logger.reference_com
-    msd_com_val = dot(com_diff, com_diff)
-    push!(logger.msd_com, msd_com_val)
+    # Compute COM MSD (skip if disabled)
+    if logger.compute_com
+        current_com = sum(current_coords) / length(current_coords)
+        com_diff = current_com - logger.reference_com
+        msd_com_val = dot(com_diff, com_diff)
+        push!(logger.msd_com, msd_com_val)
+    end
 end
 
 struct TangentLogger

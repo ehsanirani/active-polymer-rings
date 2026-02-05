@@ -47,10 +47,19 @@ function load_msd_from_jld2(filepath::String; phase::Symbol=:active)
     params = data["params"]
     close(data)
 
-    # Compute time-averaged MSD
-    println("Computing time-averaged MSD...")
-    msd_monomer_avg = compute_msd(coords_history)
-    msd_com_avg = compute_msd_com_timeaveraged(coords_history)
+    # Check flags (with backward-compatible defaults)
+    do_com = hasproperty(params, :msd_com) ? params.msd_com : true
+    do_timeavg = hasproperty(params, :msd_time_averaged) ? params.msd_time_averaged : true
+
+    # Compute time-averaged MSD (if enabled)
+    if do_timeavg
+        println("Computing time-averaged MSD...")
+        msd_monomer_avg = compute_msd(coords_history)
+        msd_com_avg = (do_com && !isempty(msd_com_noavg)) ? compute_msd_com_timeaveraged(coords_history) : Float64[]
+    else
+        msd_monomer_avg = Float64[]
+        msd_com_avg = Float64[]
+    end
 
     # Calculate lag times — use step_indices if available (new format)
     dt = phase == :active ? params.dt : params.dt_thermal
@@ -61,7 +70,7 @@ function load_msd_from_jld2(filepath::String; phase::Symbol=:active)
     else
         lag_times_noavg = collect(1:length(msd_monomer_noavg)) .* time_interval
     end
-    lag_times_avg = collect(1:length(msd_monomer_avg)) .* time_interval
+    lag_times_avg = do_timeavg ? collect(1:length(msd_monomer_avg)) .* time_interval : Float64[]
 
     return (
         lag_times_noavg = lag_times_noavg,

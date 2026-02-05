@@ -46,6 +46,10 @@ function export_msd_to_csv(jld2_file::String; phase::Symbol=:active, output_dir:
     traj_int = hasproperty(params, :traj_interval) ? params.traj_interval : params.logger_steps
     time_interval = dt * traj_int
 
+    # Check flags (with backward-compatible defaults)
+    do_com = hasproperty(params, :msd_com) ? params.msd_com : true
+    do_timeavg = hasproperty(params, :msd_time_averaged) ? params.msd_time_averaged : true
+
     # Extract run name from filename
     run_name = splitext(basename(jld2_file))[1]
 
@@ -55,61 +59,68 @@ function export_msd_to_csv(jld2_file::String; phase::Symbol=:active, output_dir:
     msd_monomer_noavg = msd_logger.msd_monomer
     msd_com_noavg = msd_logger.msd_com
 
-    # Compute time-averaged MSD
-    println("Computing time-averaged MSD...")
-    msd_monomer_avg = compute_msd(coords_history)
-    msd_com_avg = compute_msd_com_timeaveraged(coords_history)
-
     # Format function for values
     format_values(arr) = [@sprintf("%.6f", x) for x in arr]
 
-    # Save non-time-averaged monomer MSD
-    println("Saving non-time-averaged monomer MSD...")
-    filename = joinpath(output_dir, "$(run_name)_MSD_monomer_noavg.csv")
-    # Use step_indices for non-averaged lag times if available
+    # Non-averaged lag times
     if hasproperty(msd_logger, :step_indices) && !isempty(msd_logger.step_indices)
         lag_times = msd_logger.step_indices .* dt
     else
         lag_times = collect(1:length(msd_monomer_noavg)) .* time_interval
     end
 
+    # Save non-time-averaged monomer MSD
+    println("Saving non-time-averaged monomer MSD...")
+    filename = joinpath(output_dir, "$(run_name)_MSD_monomer_noavg.csv")
     df = DataFrame(lag_time = lag_times, msd = format_values(msd_monomer_noavg))
     CSV.write(filename, df)
     println("  ✓ Saved to: $filename")
 
-    # Save non-time-averaged COM MSD
-    println("Saving non-time-averaged COM MSD...")
-    filename = joinpath(output_dir, "$(run_name)_MSD_com_noavg.csv")
+    # Save non-time-averaged COM MSD (if enabled)
+    if do_com && !isempty(msd_com_noavg)
+        println("Saving non-time-averaged COM MSD...")
+        filename = joinpath(output_dir, "$(run_name)_MSD_com_noavg.csv")
+        df = DataFrame(lag_time = lag_times, msd = format_values(msd_com_noavg))
+        CSV.write(filename, df)
+        println("  ✓ Saved to: $filename")
+    end
 
-    df = DataFrame(lag_time = lag_times, msd = format_values(msd_com_noavg))
-    CSV.write(filename, df)
-    println("  ✓ Saved to: $filename")
+    # Compute and save time-averaged MSD (if enabled)
+    msd_monomer_avg = Float64[]
+    msd_com_avg = Float64[]
+    if do_timeavg
+        println("Computing time-averaged MSD...")
+        msd_monomer_avg = compute_msd(coords_history)
+        lag_times_avg = collect(1:length(msd_monomer_avg)) .* time_interval
 
-    # Save time-averaged monomer MSD
-    println("Saving time-averaged monomer MSD...")
-    filename = joinpath(output_dir, "$(run_name)_MSD_monomer_avg.csv")
-    lag_times_avg = collect(1:length(msd_monomer_avg)) .* time_interval
+        println("Saving time-averaged monomer MSD...")
+        filename = joinpath(output_dir, "$(run_name)_MSD_monomer_avg.csv")
+        df = DataFrame(lag_time = lag_times_avg, msd = format_values(msd_monomer_avg))
+        CSV.write(filename, df)
+        println("  ✓ Saved to: $filename")
 
-    df = DataFrame(lag_time = lag_times_avg, msd = format_values(msd_monomer_avg))
-    CSV.write(filename, df)
-    println("  ✓ Saved to: $filename")
-
-    # Save time-averaged COM MSD
-    println("Saving time-averaged COM MSD...")
-    filename = joinpath(output_dir, "$(run_name)_MSD_com_avg.csv")
-
-    df = DataFrame(lag_time = lag_times_avg, msd = format_values(msd_com_avg))
-    CSV.write(filename, df)
-    println("  ✓ Saved to: $filename")
+        if do_com
+            msd_com_avg = compute_msd_com_timeaveraged(coords_history)
+            println("Saving time-averaged COM MSD...")
+            filename = joinpath(output_dir, "$(run_name)_MSD_com_avg.csv")
+            df = DataFrame(lag_time = lag_times_avg, msd = format_values(msd_com_avg))
+            CSV.write(filename, df)
+            println("  ✓ Saved to: $filename")
+        end
+    end
 
     println("\n" * "="^70)
     println("EXPORT COMPLETE")
     println("="^70)
     println("Summary:")
     println("  Non-averaged frames: $(length(msd_monomer_noavg))")
-    println("  Time-averaged frames: $(length(msd_monomer_avg))")
+    if do_timeavg
+        println("  Time-averaged frames: $(length(msd_monomer_avg))")
+    end
     println("  Time interval: $time_interval")
     println("  Max lag time: $(lag_times[end])")
+    println("  COM MSD: $(do_com ? "enabled" : "disabled")")
+    println("  Time-averaged MSD: $(do_timeavg ? "enabled" : "disabled")")
     println()
 
     return (msd_monomer_noavg=msd_monomer_noavg,

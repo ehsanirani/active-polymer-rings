@@ -51,9 +51,13 @@ function load_msd_from_file(filepath::String; phase::Symbol=:active)
     params = data["params"]
     close(data)
 
-    # Compute time-averaged
-    msd_monomer_avg = compute_msd(coords_history)
-    msd_com_avg = compute_msd_com_timeaveraged(coords_history)
+    # Check flags (with backward-compatible defaults)
+    do_com = hasproperty(params, :msd_com) ? params.msd_com : true
+    do_timeavg = hasproperty(params, :msd_time_averaged) ? params.msd_time_averaged : true
+
+    # Compute time-averaged (if enabled)
+    msd_monomer_avg = do_timeavg ? compute_msd(coords_history) : Float64[]
+    msd_com_avg = (do_timeavg && do_com) ? compute_msd_com_timeaveraged(coords_history) : Float64[]
 
     # Time arrays — use step_indices if available, fall back to traj_interval
     dt = phase == :active ? params.dt : params.dt_thermal

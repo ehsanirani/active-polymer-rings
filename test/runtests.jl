@@ -45,6 +45,18 @@ using StaticArrays: SVector
         p2 = Parameters(system_type=:single, n_monomers=100, dt=0.01, dt_thermal=0.02)
         @test p2.dt_thermal == 0.02  # Should use specified value
     end
+
+    @testset "MSD flags default to true" begin
+        p = Parameters(system_type=:single, n_monomers=100)
+        @test p.msd_com == true
+        @test p.msd_time_averaged == true
+    end
+
+    @testset "MSD flags can be disabled" begin
+        p = Parameters(system_type=:single, n_monomers=100, msd_com=false, msd_time_averaged=false)
+        @test p.msd_com == false
+        @test p.msd_time_averaged == false
+    end
 end
 
 @testset "BODIES" begin
@@ -105,6 +117,18 @@ end
         logger2 = RgLogger(schedule, p2.system_type, p2.n_monomers_1, p2.n_monomers_2)
         @test logger2.system_type == :double
         @test logger2.n_monomers_2 == 100
+    end
+
+    @testset "MSDLogger compute_com flag" begin
+        schedule = make_logging_schedule(:fixed, 1000; fixed_interval=100)
+        boundary = CubicBoundary(50.0)
+        coords = [SVector(Float64(i), 0.0, 0.0) for i in 1:20]
+
+        logger_with_com = MSDLogger(schedule, :single, Int64(20), Int64(0), coords, boundary; compute_com=true)
+        @test logger_with_com.compute_com == true
+
+        logger_no_com = MSDLogger(schedule, :single, Int64(20), Int64(0), coords, boundary; compute_com=false)
+        @test logger_no_com.compute_com == false
     end
 
     @testset "TangentLogger Creation" begin
