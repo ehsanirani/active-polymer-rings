@@ -75,7 +75,7 @@ gamma = 2.0
 # Uses Velocity Verlet algorithm
 # Must be small enough for numerical stability (typically dt < 0.1)
 # If simulation crashes or shows instabilities, decrease this value
-dt = 0.01
+dt = 0.001
 
 # Integration timestep for thermalization phase (time units)
 # Set to 0 to use the same value as dt
@@ -110,7 +110,7 @@ traj_interval = 500
 #   "logspaced" : Metrics logged at logarithmically spaced steps
 #                 Dense sampling at early times, sparse at late times
 #                 Useful for capturing early-time ballistic regime
-metric_mode = "fixed"
+metric_mode = "logspaced"
 
 # Fixed interval for metric loggers (only used when metric_mode = "fixed")
 # Set to 0 to use the same interval as traj_interval
@@ -153,7 +153,7 @@ export_xyz = false
 #   "jld2" : Store metrics in binary JLD2 format (compact, preserves full structure)
 #   "csv"  : Export metrics to separate CSV files (human-readable, easy to import)
 # When using csv, creates: {params}_active_msd.csv, {params}_active_rg.csv, etc.
-metrics_format = "jld2"
+metrics_format = "csv"
 
 # =============================================================================
 # ACTIVITY PATTERN

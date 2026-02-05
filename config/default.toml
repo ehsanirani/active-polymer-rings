@@ -22,14 +22,14 @@ KT = 1.0                     # Temperature
 gamma = 2.0                  # Damping coefficient
 
 [simulation]
-dt = 0.01                    # Timestep for active dynamics
+dt = 0.001                   # Timestep for active dynamics
 dt_thermal = 0.0             # Timestep for thermalization (0 = same as dt)
 n_steps = 1000000            # Active dynamics steps
 thermal_steps = 200000       # Thermalization steps
 
 [logging]
 traj_interval = 500          # Trajectory logger interval
-metric_mode = "fixed"        # "fixed" or "logspaced"
+metric_mode = "logspaced"    # "fixed" or "logspaced"
 metric_interval = 0          # Fixed interval for metrics (0 = same as traj_interval)
 metric_npoints = 1000        # Number of log-spaced sample points
 
@@ -39,7 +39,7 @@ time_averaged = false        # Compute time-averaged MSD (stores coords in JLD2)
 
 [output]
 export_xyz = false           # Export XYZ trajectory files
-metrics_format = "jld2"      # "jld2" or "csv"
+metrics_format = "csv"       # "jld2" or "csv"
 
 [activity]
 pattern = "random"           # "random" or "block"

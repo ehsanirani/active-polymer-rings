@@ -13,7 +13,7 @@ factive = 2.0
 kangle = 0.0
 
 [simulation]
-dt = 0.01
+dt = 0.001
 n_steps = 10000
 thermal_steps = 5000
 
