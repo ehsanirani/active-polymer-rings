@@ -312,6 +312,42 @@ Fish versions are also available:
 ./tools/sweep_grid.fish config/single_ring.toml --sweep --n-active "10 30" --sweep --fact "1.0 3.0"
 ```
 
+### Aggregating Results
+
+After running multiple simulations with different `--simid` values, aggregate the metrics to compute mean and standard deviation:
+
+```bash
+# Aggregate MSD files matching a pattern
+julia --project=. scripts/aggregate.jl \
+    --pattern "_data/csv/single_100_50_0.0_5.0_*_active_msd.csv" \
+    --output "_data/csv/single_100_50_0.0_5.0_aggregated_msd.csv"
+
+# Aggregate all metrics for a base name (finds msd, rg files)
+julia --project=. scripts/aggregate.jl \
+    --base "single_100_50_0.0_5.0" \
+    --phase active \
+    --input-dir "_data/csv" \
+    --output-dir "_data/csv/aggregated"
+```
+
+**Output format** (aggregated CSV):
+```csv
+lag_time,msd_monomer_mean,msd_monomer_std,msd_monomer_sem,n_runs
+0.5,0.123,0.015,0.009,3
+1.0,0.456,0.023,0.013,3
+```
+
+**Aggregation options**:
+
+| Option | Description |
+|--------|-------------|
+| `--pattern` | Glob pattern to match input CSV files |
+| `--base` | Base name to find all metrics (alternative to --pattern) |
+| `--phase` | Phase to aggregate: `active` or `thermal` |
+| `--output` | Output file path (for --pattern mode) |
+| `--output-dir` | Output directory (for --base mode) |
+| `--interpolate` | Interpolate to common time points if times don't match |
+
 ## Output Files
 
 Simulations create organized output in `_data/`:
