@@ -4,20 +4,26 @@
 # =============================================================================
 #
 # Usage:
-#   ./tools/sweep_grid.fish <config_file> --<param1> "values" --<param2> "values" [options]
+#   ./tools/sweep_grid.fish <config_file> [overrides...] --sweep --<p1> "vals" --sweep --<p2> "vals" [options]
 #
 # Examples:
 #   # Sweep n-active and fact (3x3 = 9 simulations)
 #   ./tools/sweep_grid.fish config/single_ring.toml \
-#       --n-active "10 30 50" --fact "1.0 3.0 5.0"
+#       --sweep --n-active "10 30 50" --sweep --fact "1.0 3.0 5.0"
+#
+#   # Override some params and sweep others
+#   ./tools/sweep_grid.fish config/single_ring.toml \
+#       --n-monomers 200 --kangle 5.0 \
+#       --sweep --n-active "10 30 50" --sweep --fact "1.0 3.0"
 #
 #   # With parallel execution
 #   ./tools/sweep_grid.fish config/single_ring.toml \
-#       --n-active "10 20 30" --fact "1.0 2.0" --parallel 4
+#       --n-monomers 200 \
+#       --sweep --n-active "10 20 30" --sweep --fact "1.0 2.0" --parallel 4
 #
 #   # Dry run to preview all combinations
 #   ./tools/sweep_grid.fish config/single_ring.toml \
-#       --n-active "10 20" --fact "1.0 2.0" --dry-run
+#       --sweep --n-active "10 20" --sweep --fact "1.0 2.0" --dry-run
 #
 # =============================================================================
 
@@ -26,6 +32,7 @@ set -g PARALLEL_JOBS 1
 set -g DRY_RUN false
 set -g PREFIX ""
 set -g CONFIG_FILE ""
+set -g FIXED_OVERRIDES ""
 
 # Arrays to store parameter names and their values
 set -g PARAM_NAMES
@@ -36,22 +43,23 @@ set -g COMBINATIONS
 
 # Print usage
 function usage
-    echo "Usage: "(status basename)" <config_file> --<param1> \"values\" --<param2> \"values\" [options]"
+    echo "Usage: "(status basename)" <config_file> [overrides...] --sweep --<p1> \"vals\" --sweep --<p2> \"vals\" [options]"
     echo ""
     echo "Options:"
+    echo "  --sweep         Mark the next parameter as one to sweep"
     echo "  --parallel N    Run N simulations in parallel (default: 1)"
     echo "  --dry-run       Print commands without executing"
     echo "  --prefix STR    Prefix for simulation IDs"
     echo "  --help          Show this help message"
     echo ""
     echo "Example:"
-    echo "  "(status basename)" config/single_ring.toml --n-active \"10 30 50\" --fact \"1.0 3.0 5.0\" --parallel 4"
+    echo "  "(status basename)" config/single_ring.toml --n-monomers 200 --sweep --n-active \"10 30\" --sweep --fact \"1.0 3.0\" --parallel 4"
     exit 1
 end
 
 # Parse arguments
 function parse_args
-    if test (count $argv) -lt 3
+    if test (count $argv) -lt 2
         usage
     end
 
@@ -64,6 +72,8 @@ function parse_args
         set_color normal
         exit 1
     end
+
+    set -l in_sweep false
 
     while test (count $argv) -gt 0
         switch $argv[1]
@@ -78,10 +88,21 @@ function parse_args
                 set -e argv[1..2]
             case --help
                 usage
+            case --sweep
+                set in_sweep true
+                set -e argv[1]
             case '--*'
-                set -a PARAM_NAMES $argv[1]
-                set -a PARAM_VALUES $argv[2]
-                set -e argv[1..2]
+                if test "$in_sweep" = true
+                    # This is a sweep parameter
+                    set -a PARAM_NAMES $argv[1]
+                    set -a PARAM_VALUES $argv[2]
+                    set in_sweep false
+                    set -e argv[1..2]
+                else
+                    # This is a fixed override
+                    set -g FIXED_OVERRIDES "$FIXED_OVERRIDES $argv[1] $argv[2]"
+                    set -e argv[1..2]
+                end
             case '*'
                 set_color red
                 echo "Error: Unknown argument: $argv[1]"
@@ -92,7 +113,7 @@ function parse_args
 
     if test (count $PARAM_NAMES) -eq 0
         set_color red
-        echo "Error: At least one parameter is required"
+        echo "Error: At least one sweep parameter is required (use --sweep --<param> \"values\")"
         set_color normal
         usage
     end
@@ -138,7 +159,7 @@ function run_simulation
     set -l values (string split "," $combo_str)
 
     # Build command
-    set -l cmd "julia --project=. scripts/simulate.jl --config $CONFIG_FILE"
+    set -l cmd "julia --project=. scripts/simulate.jl --config $CONFIG_FILE$FIXED_OVERRIDES"
     set -l param_desc ""
 
     for i in (seq (count $PARAM_NAMES))
@@ -163,6 +184,7 @@ function run_simulation
         echo -n "[DRY-RUN] "
         set_color normal
         echo $cmd
+        return 0
     else
         set_color green
         echo -n "[RUNNING] "
@@ -197,7 +219,10 @@ function main
     echo "=== Grid Parameter Sweep ==="
     set_color normal
     echo "Config:    $CONFIG_FILE"
-    echo "Parameters:"
+    if test -n "$FIXED_OVERRIDES"
+        echo "Overrides:$FIXED_OVERRIDES"
+    end
+    echo "Sweep parameters:"
     for i in (seq (count $PARAM_NAMES))
         echo "  $PARAM_NAMES[$i]: $PARAM_VALUES[$i]"
     end

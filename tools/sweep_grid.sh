@@ -4,20 +4,26 @@
 # =============================================================================
 #
 # Usage:
-#   ./tools/sweep_grid.sh <config_file> --<param1> "values" --<param2> "values" [options]
+#   ./tools/sweep_grid.sh <config_file> [overrides...] --sweep --<p1> "vals" --sweep --<p2> "vals" [options]
 #
 # Examples:
 #   # Sweep n-active and fact (3x3 = 9 simulations)
 #   ./tools/sweep_grid.sh config/single_ring.toml \
-#       --n-active "10 30 50" --fact "1.0 3.0 5.0"
+#       --sweep --n-active "10 30 50" --sweep --fact "1.0 3.0 5.0"
+#
+#   # Override some params and sweep others
+#   ./tools/sweep_grid.sh config/single_ring.toml \
+#       --n-monomers 200 --kangle 5.0 \
+#       --sweep --n-active "10 30 50" --sweep --fact "1.0 3.0"
 #
 #   # With parallel execution
 #   ./tools/sweep_grid.sh config/single_ring.toml \
-#       --n-active "10 20 30" --fact "1.0 2.0" --parallel 4
+#       --n-monomers 200 \
+#       --sweep --n-active "10 20 30" --sweep --fact "1.0 2.0" --parallel 4
 #
 #   # Dry run to preview all combinations
 #   ./tools/sweep_grid.sh config/single_ring.toml \
-#       --n-active "10 20" --fact "1.0 2.0" --dry-run
+#       --sweep --n-active "10 20" --sweep --fact "1.0 2.0" --dry-run
 #
 # =============================================================================
 
@@ -35,6 +41,7 @@ PARALLEL_JOBS=1
 DRY_RUN=false
 PREFIX=""
 CONFIG_FILE=""
+FIXED_OVERRIDES=""
 
 # Arrays to store parameter names and their values
 declare -a PARAM_NAMES=()
@@ -42,22 +49,23 @@ declare -a PARAM_VALUES=()
 
 # Print usage
 usage() {
-    echo "Usage: $0 <config_file> --<param1> \"values\" --<param2> \"values\" [options]"
+    echo "Usage: $0 <config_file> [overrides...] --sweep --<p1> \"vals\" --sweep --<p2> \"vals\" [options]"
     echo ""
     echo "Options:"
+    echo "  --sweep         Mark the next parameter as one to sweep"
     echo "  --parallel N    Run N simulations in parallel (default: 1)"
     echo "  --dry-run       Print commands without executing"
     echo "  --prefix STR    Prefix for simulation IDs"
     echo "  --help          Show this help message"
     echo ""
     echo "Example:"
-    echo "  $0 config/single_ring.toml --n-active \"10 30 50\" --fact \"1.0 3.0 5.0\" --parallel 4"
+    echo "  $0 config/single_ring.toml --n-monomers 200 --sweep --n-active \"10 30\" --sweep --fact \"1.0 3.0\" --parallel 4"
     exit 1
 }
 
 # Parse arguments
 parse_args() {
-    if [[ $# -lt 3 ]]; then
+    if [[ $# -lt 2 ]]; then
         usage
     fi
 
@@ -68,6 +76,8 @@ parse_args() {
         echo -e "${RED}Error: Config file not found: $CONFIG_FILE${NC}"
         exit 1
     fi
+
+    local in_sweep=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -86,10 +96,22 @@ parse_args() {
             --help)
                 usage
                 ;;
+            --sweep)
+                in_sweep=true
+                shift
+                ;;
             --*)
-                PARAM_NAMES+=("$1")
-                PARAM_VALUES+=("$2")
-                shift 2
+                if [[ "$in_sweep" == true ]]; then
+                    # This is a sweep parameter
+                    PARAM_NAMES+=("$1")
+                    PARAM_VALUES+=("$2")
+                    in_sweep=false
+                    shift 2
+                else
+                    # This is a fixed override
+                    FIXED_OVERRIDES="$FIXED_OVERRIDES $1 $2"
+                    shift 2
+                fi
                 ;;
             *)
                 echo -e "${RED}Error: Unknown argument: $1${NC}"
@@ -99,7 +121,7 @@ parse_args() {
     done
 
     if [[ ${#PARAM_NAMES[@]} -eq 0 ]]; then
-        echo -e "${RED}Error: At least one parameter is required${NC}"
+        echo -e "${RED}Error: At least one sweep parameter is required (use --sweep --<param> \"values\")${NC}"
         usage
     fi
 }
@@ -139,7 +161,7 @@ run_simulation() {
     IFS=',' read -ra values <<< "$combo_str"
 
     # Build command
-    local cmd="julia --project=. scripts/simulate.jl --config $CONFIG_FILE"
+    local cmd="julia --project=. scripts/simulate.jl --config $CONFIG_FILE$FIXED_OVERRIDES"
     local param_desc=""
 
     for i in "${!PARAM_NAMES[@]}"; do
@@ -183,7 +205,10 @@ main() {
 
     echo -e "${YELLOW}=== Grid Parameter Sweep ===${NC}"
     echo -e "Config:    $CONFIG_FILE"
-    echo -e "Parameters:"
+    if [[ -n "$FIXED_OVERRIDES" ]]; then
+        echo -e "Overrides:$FIXED_OVERRIDES"
+    fi
+    echo -e "Sweep parameters:"
     for i in "${!PARAM_NAMES[@]}"; do
         echo -e "  ${PARAM_NAMES[$i]}: ${PARAM_VALUES[$i]}"
     done
