@@ -16,14 +16,17 @@
 #       --n-monomers 200 --kangle 5.0 \
 #       --sweep --n-active "10 30 50" --sweep --fact "1.0 3.0"
 #
+#   # Grid sweep with 5 replicates each (2x3x5 = 30 simulations)
+#   ./tools/sweep_grid.sh config/single_ring.toml \
+#       --sweep --n-active "10 30" --sweep --fact "1.0 2.0 3.0" --runs 5
+#
 #   # With parallel execution
 #   ./tools/sweep_grid.sh config/single_ring.toml \
-#       --n-monomers 200 \
-#       --sweep --n-active "10 20 30" --sweep --fact "1.0 2.0" --parallel 4
+#       --sweep --n-active "10 20 30" --sweep --fact "1.0 2.0" --runs 3 --parallel 4
 #
 #   # Dry run to preview all combinations
 #   ./tools/sweep_grid.sh config/single_ring.toml \
-#       --sweep --n-active "10 20" --sweep --fact "1.0 2.0" --dry-run
+#       --sweep --n-active "10 20" --sweep --fact "1.0 2.0" --runs 2 --dry-run
 #
 # =============================================================================
 
@@ -39,9 +42,10 @@ NC='\033[0m' # No Color
 # Default values
 PARALLEL_JOBS=1
 DRY_RUN=false
-PREFIX=""
+PREFIX="run"
 CONFIG_FILE=""
 FIXED_OVERRIDES=""
+NUM_RUNS=1
 
 # Arrays to store parameter names and their values
 declare -a PARAM_NAMES=()
@@ -53,13 +57,18 @@ usage() {
     echo ""
     echo "Options:"
     echo "  --sweep         Mark the next parameter as one to sweep"
+    echo "  --runs N        Number of replicates per parameter combination (default: 1)"
     echo "  --parallel N    Run N simulations in parallel (default: 1)"
     echo "  --dry-run       Print commands without executing"
-    echo "  --prefix STR    Prefix for simulation IDs"
+    echo "  --prefix STR    Prefix for simulation IDs (default: run)"
     echo "  --help          Show this help message"
     echo ""
-    echo "Example:"
-    echo "  $0 config/single_ring.toml --n-monomers 200 --sweep --n-active \"10 30\" --sweep --fact \"1.0 3.0\" --parallel 4"
+    echo "Examples:"
+    echo "  # Grid sweep"
+    echo "  $0 config/single_ring.toml --sweep --n-active \"10 30\" --sweep --fact \"1.0 3.0\""
+    echo ""
+    echo "  # Grid sweep with 5 replicates each"
+    echo "  $0 config/single_ring.toml --sweep --n-active \"10 30\" --sweep --fact \"1.0 3.0\" --runs 5"
     exit 1
 }
 
@@ -91,6 +100,10 @@ parse_args() {
                 ;;
             --prefix)
                 PREFIX="$2"
+                shift 2
+                ;;
+            --runs)
+                NUM_RUNS="$2"
                 shift 2
                 ;;
             --help)
@@ -155,7 +168,7 @@ generate_combinations() {
 # Run a single simulation with given parameter values
 run_simulation() {
     local combo_str="$1"
-    local sim_idx="$2"
+    local simid="$2"
 
     # Parse combination string back to array
     IFS=',' read -ra values <<< "$combo_str"
@@ -164,32 +177,25 @@ run_simulation() {
     local cmd="julia --project=. scripts/simulate.jl --config $CONFIG_FILE$FIXED_OVERRIDES"
     local param_desc=""
 
-    for i in "${!PARAM_NAMES[@]}"; do
-        cmd="$cmd ${PARAM_NAMES[$i]} ${values[$i]}"
+    for idx in "${!PARAM_NAMES[@]}"; do
+        cmd="$cmd ${PARAM_NAMES[$idx]} ${values[$idx]}"
         if [[ -n "$param_desc" ]]; then
             param_desc="$param_desc, "
         fi
-        param_desc="$param_desc${PARAM_NAMES[$i]}=${values[$i]}"
+        param_desc="$param_desc${PARAM_NAMES[$idx]}=${values[$idx]}"
     done
 
-    # Add simulation ID
-    local simid=""
-    if [[ -n "$PREFIX" ]]; then
-        simid="${PREFIX}_${sim_idx}"
-    else
-        simid="grid_${sim_idx}"
-    fi
     cmd="$cmd --simid $simid"
 
     if [[ "$DRY_RUN" == true ]]; then
         echo -e "${BLUE}[DRY-RUN]${NC} $cmd"
         return 0
     else
-        echo -e "${GREEN}[RUNNING]${NC} [$sim_idx] $param_desc"
+        echo -e "${GREEN}[RUNNING]${NC} $param_desc, simid=$simid"
         if eval "$cmd"; then
-            echo -e "${GREEN}[DONE]${NC} [$sim_idx] $param_desc"
+            echo -e "${GREEN}[DONE]${NC} $param_desc, simid=$simid"
         else
-            echo -e "${RED}[FAILED]${NC} [$sim_idx] $param_desc"
+            echo -e "${RED}[FAILED]${NC} $param_desc, simid=$simid"
             return 1
         fi
     fi
@@ -201,7 +207,8 @@ main() {
 
     # Generate all combinations
     generate_combinations
-    local total=${#COMBINATIONS[@]}
+    local n_combos=${#COMBINATIONS[@]}
+    local total=$((n_combos * NUM_RUNS))
 
     echo -e "${YELLOW}=== Grid Parameter Sweep ===${NC}"
     echo -e "Config:    $CONFIG_FILE"
@@ -212,11 +219,13 @@ main() {
     for i in "${!PARAM_NAMES[@]}"; do
         echo -e "  ${PARAM_NAMES[$i]}: ${PARAM_VALUES[$i]}"
     done
+    echo -e "Combinations: $n_combos"
+    if [[ "$NUM_RUNS" -gt 1 ]]; then
+        echo -e "Runs:      $NUM_RUNS replicates per combination"
+    fi
     echo -e "Total:     $total simulations"
     echo -e "Parallel:  $PARALLEL_JOBS jobs"
-    if [[ -n "$PREFIX" ]]; then
-        echo -e "Prefix:    $PREFIX"
-    fi
+    echo -e "Prefix:    $PREFIX"
     echo ""
 
     if [[ "$DRY_RUN" == true ]]; then
@@ -233,31 +242,40 @@ main() {
     for i in "${!COMBINATIONS[@]}"; do
         local combo="${COMBINATIONS[$i]}"
 
-        if [[ "$PARALLEL_JOBS" -eq 1 ]]; then
-            # Sequential execution
-            if run_simulation "$combo" "$i"; then
-                completed=$((completed + 1))
+        for run in $(seq 0 $((NUM_RUNS - 1))); do
+            local simid=""
+            if [[ "$NUM_RUNS" -gt 1 ]]; then
+                simid="${PREFIX}_${i}_${run}"
             else
-                failed=$((failed + 1))
+                simid="${PREFIX}_${i}"
             fi
-        else
-            # Parallel execution
-            run_simulation "$combo" "$i" &
-            pids+=($!)
-            running=$((running + 1))
 
-            # Wait if we've reached the parallel limit
-            if [[ $running -ge $PARALLEL_JOBS ]]; then
-                wait "${pids[0]}"
-                if [[ $? -eq 0 ]]; then
+            if [[ "$PARALLEL_JOBS" -eq 1 ]]; then
+                # Sequential execution
+                if run_simulation "$combo" "$simid"; then
                     completed=$((completed + 1))
                 else
                     failed=$((failed + 1))
                 fi
-                pids=("${pids[@]:1}")
-                running=$((running - 1))
+            else
+                # Parallel execution
+                run_simulation "$combo" "$simid" &
+                pids+=($!)
+                running=$((running + 1))
+
+                # Wait if we've reached the parallel limit
+                if [[ $running -ge $PARALLEL_JOBS ]]; then
+                    wait "${pids[0]}"
+                    if [[ $? -eq 0 ]]; then
+                        completed=$((completed + 1))
+                    else
+                        failed=$((failed + 1))
+                    fi
+                    pids=("${pids[@]:1}")
+                    running=$((running - 1))
+                fi
             fi
-        fi
+        done
     done
 
     # Wait for remaining parallel jobs

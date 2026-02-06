@@ -16,23 +16,27 @@
 #       --n-monomers 200 --kangle 5.0 \
 #       --sweep --n-active "10 30 50" --sweep --fact "1.0 3.0"
 #
+#   # Grid sweep with 5 replicates each (2x3x5 = 30 simulations)
+#   ./tools/sweep_grid.fish config/single_ring.toml \
+#       --sweep --n-active "10 30" --sweep --fact "1.0 2.0 3.0" --runs 5
+#
 #   # With parallel execution
 #   ./tools/sweep_grid.fish config/single_ring.toml \
-#       --n-monomers 200 \
-#       --sweep --n-active "10 20 30" --sweep --fact "1.0 2.0" --parallel 4
+#       --sweep --n-active "10 20 30" --sweep --fact "1.0 2.0" --runs 3 --parallel 4
 #
 #   # Dry run to preview all combinations
 #   ./tools/sweep_grid.fish config/single_ring.toml \
-#       --sweep --n-active "10 20" --sweep --fact "1.0 2.0" --dry-run
+#       --sweep --n-active "10 20" --sweep --fact "1.0 2.0" --runs 2 --dry-run
 #
 # =============================================================================
 
 # Default values
 set -g PARALLEL_JOBS 1
 set -g DRY_RUN false
-set -g PREFIX ""
+set -g PREFIX "run"
 set -g CONFIG_FILE ""
 set -g FIXED_OVERRIDES ""
+set -g NUM_RUNS 1
 
 # Arrays to store parameter names and their values
 set -g PARAM_NAMES
@@ -47,13 +51,18 @@ function usage
     echo ""
     echo "Options:"
     echo "  --sweep         Mark the next parameter as one to sweep"
+    echo "  --runs N        Number of replicates per parameter combination (default: 1)"
     echo "  --parallel N    Run N simulations in parallel (default: 1)"
     echo "  --dry-run       Print commands without executing"
-    echo "  --prefix STR    Prefix for simulation IDs"
+    echo "  --prefix STR    Prefix for simulation IDs (default: run)"
     echo "  --help          Show this help message"
     echo ""
-    echo "Example:"
-    echo "  "(status basename)" config/single_ring.toml --n-monomers 200 --sweep --n-active \"10 30\" --sweep --fact \"1.0 3.0\" --parallel 4"
+    echo "Examples:"
+    echo "  # Grid sweep"
+    echo "  "(status basename)" config/single_ring.toml --sweep --n-active \"10 30\" --sweep --fact \"1.0 3.0\""
+    echo ""
+    echo "  # Grid sweep with 5 replicates each"
+    echo "  "(status basename)" config/single_ring.toml --sweep --n-active \"10 30\" --sweep --fact \"1.0 3.0\" --runs 5"
     exit 1
 end
 
@@ -85,6 +94,9 @@ function parse_args
                 set -e argv[1]
             case --prefix
                 set -g PREFIX $argv[2]
+                set -e argv[1..2]
+            case --runs
+                set -g NUM_RUNS $argv[2]
                 set -e argv[1..2]
             case --help
                 usage
@@ -153,7 +165,7 @@ end
 # Run a single simulation with given parameter values
 function run_simulation
     set -l combo_str $argv[1]
-    set -l sim_idx $argv[2]
+    set -l simid $argv[2]
 
     # Parse combination string back to array
     set -l values (string split "," $combo_str)
@@ -170,13 +182,6 @@ function run_simulation
         set param_desc "$param_desc$PARAM_NAMES[$i]=$values[$i]"
     end
 
-    # Add simulation ID
-    set -l simid ""
-    if test -n "$PREFIX"
-        set simid {$PREFIX}_{$sim_idx}
-    else
-        set simid grid_{$sim_idx}
-    end
     set cmd "$cmd --simid $simid"
 
     if test "$DRY_RUN" = true
@@ -189,19 +194,19 @@ function run_simulation
         set_color green
         echo -n "[RUNNING] "
         set_color normal
-        echo "[$sim_idx] $param_desc"
+        echo "$param_desc, simid=$simid"
 
         if eval $cmd
             set_color green
             echo -n "[DONE] "
             set_color normal
-            echo "[$sim_idx] $param_desc"
+            echo "$param_desc, simid=$simid"
             return 0
         else
             set_color red
             echo -n "[FAILED] "
             set_color normal
-            echo "[$sim_idx] $param_desc"
+            echo "$param_desc, simid=$simid"
             return 1
         end
     end
@@ -213,7 +218,8 @@ function main
 
     # Generate all combinations
     generate_combinations
-    set -l total (count $COMBINATIONS)
+    set -l n_combos (count $COMBINATIONS)
+    set -l total (math "$n_combos * $NUM_RUNS")
 
     set_color yellow
     echo "=== Grid Parameter Sweep ==="
@@ -226,11 +232,13 @@ function main
     for i in (seq (count $PARAM_NAMES))
         echo "  $PARAM_NAMES[$i]: $PARAM_VALUES[$i]"
     end
+    echo "Combinations: $n_combos"
+    if test $NUM_RUNS -gt 1
+        echo "Runs:      $NUM_RUNS replicates per combination"
+    end
     echo "Total:     $total simulations"
     echo "Parallel:  $PARALLEL_JOBS jobs"
-    if test -n "$PREFIX"
-        echo "Prefix:    $PREFIX"
-    end
+    echo "Prefix:    $PREFIX"
     echo ""
 
     if test "$DRY_RUN" = true
@@ -249,27 +257,36 @@ function main
         set -l combo $COMBINATIONS[$i]
         set -l idx (math $i - 1)
 
-        if test $PARALLEL_JOBS -eq 1
-            # Sequential execution
-            if run_simulation $combo $idx
-                set completed (math $completed + 1)
+        for run in (seq 0 (math "$NUM_RUNS - 1"))
+            set -l simid ""
+            if test $NUM_RUNS -gt 1
+                set simid "$PREFIX"_"$idx"_"$run"
             else
-                set failed (math $failed + 1)
+                set simid "$PREFIX"_"$idx"
             end
-        else
-            # Parallel execution
-            run_simulation $combo $idx &
-            set -a jobs $last_pid
 
-            # Wait if we've reached the parallel limit
-            if test (count $jobs) -ge $PARALLEL_JOBS
-                wait $jobs[1]
-                if test $status -eq 0
+            if test $PARALLEL_JOBS -eq 1
+                # Sequential execution
+                if run_simulation $combo $simid
                     set completed (math $completed + 1)
                 else
                     set failed (math $failed + 1)
                 end
-                set -e jobs[1]
+            else
+                # Parallel execution
+                run_simulation $combo $simid &
+                set -a jobs $last_pid
+
+                # Wait if we've reached the parallel limit
+                if test (count $jobs) -ge $PARALLEL_JOBS
+                    wait $jobs[1]
+                    if test $status -eq 0
+                        set completed (math $completed + 1)
+                    else
+                        set failed (math $failed + 1)
+                    end
+                    set -e jobs[1]
+                end
             end
         end
     end

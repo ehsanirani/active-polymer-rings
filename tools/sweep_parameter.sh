@@ -4,7 +4,7 @@
 # =============================================================================
 #
 # Usage:
-#   ./tools/sweep_parameter.sh <config_file> [overrides...] --sweep --<param> "values" [options]
+#   ./tools/sweep_parameter.sh <config_file> [overrides...] [--sweep --<param> "values"] [options]
 #
 # Examples:
 #   # Sweep active force
@@ -16,14 +16,20 @@
 #       --n-monomers 200 --kangle 5.0 \
 #       --sweep --fact "1.0 2.0 3.0"
 #
+#   # Run 10 replicates with same parameters
+#   ./tools/sweep_parameter.sh config/single_ring.toml --runs 10
+#
+#   # Sweep parameter with 5 replicates each (3 values × 5 runs = 15 sims)
+#   ./tools/sweep_parameter.sh config/single_ring.toml \
+#       --sweep --fact "1.0 2.0 3.0" --runs 5
+#
 #   # With parallel execution
 #   ./tools/sweep_parameter.sh config/single_ring.toml \
-#       --n-monomers 200 \
-#       --sweep --n-active "10 20 30 40" --parallel 4
+#       --sweep --n-active "10 20 30 40" --runs 3 --parallel 4
 #
 #   # Dry run to preview commands
 #   ./tools/sweep_parameter.sh config/single_ring.toml \
-#       --sweep --fact "1.0 2.0" --dry-run
+#       --sweep --fact "1.0 2.0" --runs 3 --dry-run
 #
 # =============================================================================
 
@@ -39,25 +45,34 @@ NC='\033[0m' # No Color
 # Default values
 PARALLEL_JOBS=1
 DRY_RUN=false
-PREFIX=""
+PREFIX="run"
 CONFIG_FILE=""
 PARAM_NAME=""
 PARAM_VALUES=""
 FIXED_OVERRIDES=""
+NUM_RUNS=1
 
 # Print usage
 usage() {
-    echo "Usage: $0 <config_file> [overrides...] --sweep --<param> \"values\" [options]"
+    echo "Usage: $0 <config_file> [overrides...] [--sweep --<param> \"values\"] [options]"
     echo ""
     echo "Options:"
     echo "  --sweep         Mark the next parameter as the one to sweep"
+    echo "  --runs N        Number of replicates per parameter combination (default: 1)"
     echo "  --parallel N    Run N simulations in parallel (default: 1)"
     echo "  --dry-run       Print commands without executing"
-    echo "  --prefix STR    Prefix for simulation IDs"
+    echo "  --prefix STR    Prefix for simulation IDs (default: run)"
     echo "  --help          Show this help message"
     echo ""
-    echo "Example:"
-    echo "  $0 config/single_ring.toml --n-monomers 200 --sweep --fact \"1.0 2.0 3.0\" --parallel 4"
+    echo "Examples:"
+    echo "  # Sweep a parameter"
+    echo "  $0 config/single_ring.toml --sweep --fact \"1.0 2.0 3.0\""
+    echo ""
+    echo "  # Run 10 replicates with same parameters"
+    echo "  $0 config/single_ring.toml --runs 10"
+    echo ""
+    echo "  # Sweep with 5 replicates each"
+    echo "  $0 config/single_ring.toml --sweep --fact \"1.0 2.0 3.0\" --runs 5"
     exit 1
 }
 
@@ -89,6 +104,10 @@ parse_args() {
                 ;;
             --prefix)
                 PREFIX="$2"
+                shift 2
+                ;;
+            --runs)
+                NUM_RUNS="$2"
                 shift 2
                 ;;
             --help)
@@ -123,9 +142,12 @@ parse_args() {
         esac
     done
 
-    if [[ -z "$PARAM_NAME" || -z "$PARAM_VALUES" ]]; then
-        echo -e "${RED}Error: Sweep parameter is required (use --sweep --<param> \"values\")${NC}"
-        usage
+    # If no sweep parameter, we're just doing replicates
+    if [[ -z "$PARAM_NAME" ]]; then
+        if [[ "$NUM_RUNS" -lt 2 ]]; then
+            echo -e "${RED}Error: Must specify --sweep or --runs N (with N >= 2)${NC}"
+            usage
+        fi
     fi
 }
 
@@ -133,7 +155,11 @@ parse_args() {
 run_simulation() {
     local value="$1"
     local simid="$2"
-    local cmd="julia --project=. scripts/simulate.jl --config $CONFIG_FILE$FIXED_OVERRIDES $PARAM_NAME $value"
+    local cmd="julia --project=. scripts/simulate.jl --config $CONFIG_FILE$FIXED_OVERRIDES"
+
+    if [[ -n "$value" ]]; then
+        cmd="$cmd $PARAM_NAME $value"
+    fi
 
     if [[ -n "$simid" ]]; then
         cmd="$cmd --simid $simid"
@@ -143,11 +169,16 @@ run_simulation() {
         echo -e "${BLUE}[DRY-RUN]${NC} $cmd"
         return 0
     else
-        echo -e "${GREEN}[RUNNING]${NC} $PARAM_NAME=$value"
+        local desc=""
+        if [[ -n "$value" ]]; then
+            desc="$PARAM_NAME=$value, "
+        fi
+        desc="${desc}simid=$simid"
+        echo -e "${GREEN}[RUNNING]${NC} $desc"
         if eval "$cmd"; then
-            echo -e "${GREEN}[DONE]${NC} $PARAM_NAME=$value"
+            echo -e "${GREEN}[DONE]${NC} $desc"
         else
-            echo -e "${RED}[FAILED]${NC} $PARAM_NAME=$value"
+            echo -e "${RED}[FAILED]${NC} $desc"
             return 1
         fi
     fi
@@ -157,21 +188,33 @@ run_simulation() {
 main() {
     parse_args "$@"
 
-    # Convert values string to array
-    read -ra VALUES_ARRAY <<< "$PARAM_VALUES"
-    local total=${#VALUES_ARRAY[@]}
+    # Determine what we're doing
+    local has_sweep=false
+    local n_values=1
+    local VALUES_ARRAY=()
+
+    if [[ -n "$PARAM_NAME" ]]; then
+        has_sweep=true
+        read -ra VALUES_ARRAY <<< "$PARAM_VALUES"
+        n_values=${#VALUES_ARRAY[@]}
+    fi
+
+    local total=$((n_values * NUM_RUNS))
 
     echo -e "${YELLOW}=== Parameter Sweep ===${NC}"
     echo -e "Config:    $CONFIG_FILE"
     if [[ -n "$FIXED_OVERRIDES" ]]; then
         echo -e "Overrides:$FIXED_OVERRIDES"
     fi
-    echo -e "Sweep:     $PARAM_NAME = ${VALUES_ARRAY[*]}"
+    if [[ "$has_sweep" == true ]]; then
+        echo -e "Sweep:     $PARAM_NAME = ${VALUES_ARRAY[*]}"
+    fi
+    if [[ "$NUM_RUNS" -gt 1 ]]; then
+        echo -e "Runs:      $NUM_RUNS replicates per combination"
+    fi
     echo -e "Total:     $total simulations"
     echo -e "Parallel:  $PARALLEL_JOBS jobs"
-    if [[ -n "$PREFIX" ]]; then
-        echo -e "Prefix:    $PREFIX"
-    fi
+    echo -e "Prefix:    $PREFIX"
     echo ""
 
     if [[ "$DRY_RUN" == true ]]; then
@@ -185,40 +228,72 @@ main() {
     local failed=0
     local pids=()
 
-    for i in "${!VALUES_ARRAY[@]}"; do
-        local value="${VALUES_ARRAY[$i]}"
-        local simid=""
+    # If no sweep, just do runs
+    if [[ "$has_sweep" == false ]]; then
+        for run in $(seq 0 $((NUM_RUNS - 1))); do
+            local simid="${PREFIX}_${run}"
 
-        if [[ -n "$PREFIX" ]]; then
-            simid="${PREFIX}_${i}"
-        fi
-
-        if [[ "$PARALLEL_JOBS" -eq 1 ]]; then
-            # Sequential execution
-            if run_simulation "$value" "$simid"; then
-                completed=$((completed + 1))
-            else
-                failed=$((failed + 1))
-            fi
-        else
-            # Parallel execution
-            run_simulation "$value" "$simid" &
-            pids+=($!)
-            running=$((running + 1))
-
-            # Wait if we've reached the parallel limit
-            if [[ $running -ge $PARALLEL_JOBS ]]; then
-                wait "${pids[0]}"
-                if [[ $? -eq 0 ]]; then
+            if [[ "$PARALLEL_JOBS" -eq 1 ]]; then
+                if run_simulation "" "$simid"; then
                     completed=$((completed + 1))
                 else
                     failed=$((failed + 1))
                 fi
-                pids=("${pids[@]:1}")
-                running=$((running - 1))
+            else
+                run_simulation "" "$simid" &
+                pids+=($!)
+                running=$((running + 1))
+
+                if [[ $running -ge $PARALLEL_JOBS ]]; then
+                    wait "${pids[0]}"
+                    if [[ $? -eq 0 ]]; then
+                        completed=$((completed + 1))
+                    else
+                        failed=$((failed + 1))
+                    fi
+                    pids=("${pids[@]:1}")
+                    running=$((running - 1))
+                fi
             fi
-        fi
-    done
+        done
+    else
+        # Sweep with optional runs
+        for i in "${!VALUES_ARRAY[@]}"; do
+            local value="${VALUES_ARRAY[$i]}"
+
+            for run in $(seq 0 $((NUM_RUNS - 1))); do
+                local simid=""
+                if [[ "$NUM_RUNS" -gt 1 ]]; then
+                    simid="${PREFIX}_${i}_${run}"
+                else
+                    simid="${PREFIX}_${i}"
+                fi
+
+                if [[ "$PARALLEL_JOBS" -eq 1 ]]; then
+                    if run_simulation "$value" "$simid"; then
+                        completed=$((completed + 1))
+                    else
+                        failed=$((failed + 1))
+                    fi
+                else
+                    run_simulation "$value" "$simid" &
+                    pids+=($!)
+                    running=$((running + 1))
+
+                    if [[ $running -ge $PARALLEL_JOBS ]]; then
+                        wait "${pids[0]}"
+                        if [[ $? -eq 0 ]]; then
+                            completed=$((completed + 1))
+                        else
+                            failed=$((failed + 1))
+                        fi
+                        pids=("${pids[@]:1}")
+                        running=$((running - 1))
+                    fi
+                fi
+            done
+        done
+    fi
 
     # Wait for remaining parallel jobs
     for pid in "${pids[@]}"; do

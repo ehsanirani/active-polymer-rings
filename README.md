@@ -266,6 +266,13 @@ Sweep over one parameter while keeping others fixed:
     --n-monomers 200 --kangle 5.0 \
     --sweep --fact "1.0 2.0 3.0"
 
+# Run 10 replicates with same parameters (for statistics)
+./tools/sweep_parameter.sh config/single_ring.toml --runs 10
+
+# Sweep parameter with 5 replicates each (3 values × 5 runs = 15 sims)
+./tools/sweep_parameter.sh config/single_ring.toml \
+    --sweep --fact "1.0 2.0 3.0" --runs 5
+
 # Run 4 simulations in parallel
 ./tools/sweep_parameter.sh config/single_ring.toml \
     --sweep --n-active "10 20 30 40" --parallel 4
@@ -289,6 +296,10 @@ Sweep over multiple parameters (all combinations):
     --n-monomers 200 --kangle 5.0 \
     --sweep --n-active "10 30 50" --sweep --fact "1.0 3.0"
 
+# Grid sweep with 5 replicates each (2x3x5 = 30 simulations)
+./tools/sweep_grid.sh config/single_ring.toml \
+    --sweep --n-active "10 30" --sweep --fact "1.0 2.0 3.0" --runs 5
+
 # With parallel execution
 ./tools/sweep_grid.sh config/single_ring.toml \
     --sweep --n-active "10 20 30" --sweep --fact "1.0 2.0" --parallel 4
@@ -300,9 +311,10 @@ Sweep over multiple parameters (all combinations):
 |--------|-------------|
 | `--sweep --param "values"` | Parameter to sweep (space-separated values) |
 | `--param value` | Fixed override (applied to all runs) |
+| `--runs N` | Number of replicates per parameter combination (default: 1) |
 | `--parallel N` | Run N simulations in parallel |
 | `--dry-run` | Preview commands without executing |
-| `--prefix STR` | Prefix for simulation IDs |
+| `--prefix STR` | Prefix for simulation IDs (default: run) |
 
 ### Fish Shell
 
