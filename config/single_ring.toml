@@ -201,7 +201,7 @@ no_minimize = false
 #                  Guaranteed unknotted for k_max <= 15.
 # Crankshaft moves rotate segments of the ring around an axis defined by the
 # segment endpoints, which preserves topology (no knot introduction).
-init_method = "crankshaft"
+init_method = "fourier"
 
 # Enable temperature and segment length annealing during crankshaft initialization
 # Starts with high temperature (5×kT) and short segments, then cools down

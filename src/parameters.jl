@@ -60,7 +60,7 @@ function Parameters(; system_type::Symbol=:single,
                    # Activity distribution
                    activity_pattern=:random,
                    # Initialization method
-                   init_method=:crankshaft,
+                   init_method=:fourier,
                    init_annealing=true,
                    init_collapse=true,
                    init_kmax=10,

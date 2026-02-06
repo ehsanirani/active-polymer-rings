@@ -353,7 +353,7 @@ function merge_config(cli_args::Dict{Symbol,Any}, config::Dict{Symbol,Any})
         :export_xyz => false,
         :metrics_format => "jld2",
         :activity_pattern => "random",
-        :init_method => "crankshaft",
+        :init_method => "fourier",
         :init_annealing => true,
         :init_collapse => true,
         :init_kmax => 10,

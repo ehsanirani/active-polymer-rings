@@ -49,7 +49,7 @@ L = 0.0                      # Box size (0 = auto-calculate)
 rcut_nf = 2.0                # Neighbor finder cutoff
 nthreads = 1                 # Number of threads
 no_minimize = false          # Skip energy minimization
-init_method = "crankshaft"   # Ring initialization: "circle", "crankshaft", or "fourier"
+init_method = "fourier"      # Ring initialization: "circle", "crankshaft", or "fourier"
 init_annealing = true        # Enable temperature/segment annealing during init
 init_collapse = true         # Enable collapse potential during init
 init_kmax = 10               # Number of Fourier modes for "fourier" init (k_max <= 15 avoids knots)
