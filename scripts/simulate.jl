@@ -191,6 +191,30 @@ function parse_commandline()
             arg_type = Bool
             default = nothing
             dest_name = "no_minimize"
+
+        "--init-method"
+            help = "Ring initialization method: circle, crankshaft, or fourier"
+            arg_type = String
+            default = nothing
+            dest_name = "init_method"
+
+        "--init-annealing"
+            help = "Enable temperature/segment annealing during initialization"
+            arg_type = Bool
+            default = nothing
+            dest_name = "init_annealing"
+
+        "--init-collapse"
+            help = "Enable collapse potential during initialization"
+            arg_type = Bool
+            default = nothing
+            dest_name = "init_collapse"
+
+        "--init-kmax"
+            help = "Number of Fourier modes for :fourier init method"
+            arg_type = Int
+            default = nothing
+            dest_name = "init_kmax"
     end
 
     return parse_args(s; as_symbols=true)
@@ -201,7 +225,7 @@ Load configuration from TOML file.
 """
 function load_config(config_path::String)
     if isempty(config_path)
-        return Dict{String,Any}()
+        return Dict{Symbol,Any}()
     end
 
     if !isfile(config_path)
@@ -237,7 +261,7 @@ function load_config(config_path::String)
     # Physics
     if haskey(config, "physics")
         p = config["physics"]
-        get!(flat, :fact, get(p, "factive", nothing))
+        get!(flat, :fact, get(p, "fact", nothing))
         get!(flat, :kangle, get(p, "kangle", nothing))
         get!(flat, :kbond, get(p, "kbond", nothing))
         get!(flat, :KT, get(p, "KT", nothing))
@@ -265,8 +289,8 @@ function load_config(config_path::String)
     # MSD
     if haskey(config, "msd")
         msd = config["msd"]
-        get!(flat, :msd_com, get(msd, "compute_com", nothing))
-        get!(flat, :msd_time_averaged, get(msd, "time_averaged", nothing))
+        get!(flat, :msd_com, get(msd, "msd_com", nothing))
+        get!(flat, :msd_time_averaged, get(msd, "msd_time_averaged", nothing))
     end
 
     # Output
@@ -279,17 +303,21 @@ function load_config(config_path::String)
     # Activity
     if haskey(config, "activity")
         act = config["activity"]
-        get!(flat, :activity_pattern, get(act, "pattern", nothing))
+        get!(flat, :activity_pattern, get(act, "activity_pattern", nothing))
     end
 
     # Advanced
     if haskey(config, "advanced")
         adv = config["advanced"]
         get!(flat, :L, get(adv, "L", nothing))
-        get!(flat, :rcut_nf, get(adv, "rcut_neighbor_finder", nothing))
+        get!(flat, :rcut_nf, get(adv, "rcut_nf", nothing))
         get!(flat, :nthreads, get(adv, "nthreads", nothing))
         get!(flat, :no_minimize, get(adv, "no_minimize", nothing))
         get!(flat, :simid, get(adv, "simid", nothing))
+        get!(flat, :init_method, get(adv, "init_method", nothing))
+        get!(flat, :init_annealing, get(adv, "init_annealing", nothing))
+        get!(flat, :init_collapse, get(adv, "init_collapse", nothing))
+        get!(flat, :init_kmax, get(adv, "init_kmax", nothing))
     end
 
     return flat
@@ -325,6 +353,10 @@ function merge_config(cli_args::Dict{Symbol,Any}, config::Dict{Symbol,Any})
         :export_xyz => false,
         :metrics_format => "jld2",
         :activity_pattern => "random",
+        :init_method => "crankshaft",
+        :init_annealing => true,
+        :init_collapse => true,
+        :init_kmax => 10,
         :L => 0.0,
         :γ => 2.0,
         :KT => 1.0,
@@ -705,6 +737,10 @@ function main(args=ARGS)
             export_xyz=cfg[:export_xyz],
             metrics_format=Symbol(cfg[:metrics_format]),
             activity_pattern=Symbol(cfg[:activity_pattern]),
+            init_method=Symbol(cfg[:init_method]),
+            init_annealing=cfg[:init_annealing],
+            init_collapse=cfg[:init_collapse],
+            init_kmax=cfg[:init_kmax],
             L=cfg[:L],
             γ=cfg[:γ],
             KT=cfg[:KT],
@@ -734,6 +770,10 @@ function main(args=ARGS)
             export_xyz=cfg[:export_xyz],
             metrics_format=Symbol(cfg[:metrics_format]),
             activity_pattern=Symbol(cfg[:activity_pattern]),
+            init_method=Symbol(cfg[:init_method]),
+            init_annealing=cfg[:init_annealing],
+            init_collapse=cfg[:init_collapse],
+            init_kmax=cfg[:init_kmax],
             L=cfg[:L],
             γ=cfg[:γ],
             KT=cfg[:KT],

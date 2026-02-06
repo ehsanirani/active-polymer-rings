@@ -7,7 +7,7 @@ abstract type AbstractParameters end
 mutable struct Parameters <: AbstractParameters
     # System identification
     system_type::Symbol  # :single or :double
-    
+
     # Common parameters for all systems
     KT::Float64
     mass::Float64
@@ -30,14 +30,20 @@ mutable struct Parameters <: AbstractParameters
     γ::Float64
     rcut_nf::Float64
     L::Float64
-    
+
     # Activity distribution
     activity_pattern::Symbol   # :random or :block
+
+    # Initialization method
+    init_method::Symbol        # :circle, :crankshaft, or :fourier
+    init_annealing::Bool       # Enable temperature/segment annealing during init
+    init_collapse::Bool        # Enable collapse potential during init
+    init_kmax::Int64           # Number of Fourier modes for :fourier init method
 
     # Single ring parameters (used when system_type == :single)
     n_monomers::Int64
     n_active::Int64
-    
+
     # Double ring parameters (used when system_type == :double)
     n_monomers_1::Int64
     n_monomers_2::Int64
@@ -53,6 +59,11 @@ function Parameters(; system_type::Symbol=:single,
                    L=0.0, nthreads=0, γ=2.0, rcut_nf=2.0,
                    # Activity distribution
                    activity_pattern=:random,
+                   # Initialization method
+                   init_method=:crankshaft,
+                   init_annealing=true,
+                   init_collapse=true,
+                   init_kmax=10,
                    # Single ring
                    n_monomers=100, n_active=0,
                    # Double ring
@@ -89,6 +100,11 @@ function Parameters(; system_type::Symbol=:single,
         error("system_type must be :single or :double, got $system_type")
     end
     
+    # Validate init_method
+    if init_method ∉ (:circle, :crankshaft, :fourier)
+        error("init_method must be :circle, :crankshaft, or :fourier, got $init_method")
+    end
+
     Parameters(
         system_type,
         KT, mass, kbond, kangle, factive, dt, dt_thermal, n_steps, thermal_steps,
@@ -96,6 +112,7 @@ function Parameters(; system_type::Symbol=:single,
         msd_com, msd_time_averaged, export_xyz, metrics_format,
         nthreads, γ, rcut_nf, L,
         activity_pattern,
+        init_method, init_annealing, init_collapse, init_kmax,
         n_monomers, n_active,
         n_monomers_1, n_monomers_2, n_active_1, n_active_2
     )

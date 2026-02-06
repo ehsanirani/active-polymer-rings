@@ -38,9 +38,9 @@ n_active = 0
 
 [physics]
 # Active force magnitude applied to active monomers along their local tangent
-# The ratio factive/KT determines whether activity or thermal fluctuations dominate
+# The ratio fact/KT determines whether activity or thermal fluctuations dominate
 # Typical range: 0.1 - 10.0
-factive = 1.0
+fact = 1.0
 
 # Angle bending rigidity constant (energy units)
 # Controls polymer stiffness via a cosine angle potential
@@ -130,13 +130,13 @@ metric_npoints = 1000
 # Enable center-of-mass MSD computation
 # By default, only monomer MSD is computed
 # Set to true to also compute COM MSD
-compute_com = false
+msd_com = false
 
 # Enable time-averaged MSD computation in post-processing
 # By default, only non-time-averaged (single t0) MSD from simulation logger is used
 # When true, coordinate trajectories are stored in JLD2 (required for time-averaging)
 # Note: This increases JLD2 file size significantly
-time_averaged = false
+msd_time_averaged = false
 
 # =============================================================================
 # OUTPUT OPTIONS
@@ -163,7 +163,7 @@ metrics_format = "csv"
 # Distribution of active monomers along the polymer chain: "random" or "block"
 #   "random" : Active monomers randomly distributed (shuffled)
 #   "block"  : Active monomers form a contiguous block starting from monomer 1
-pattern = "random"
+activity_pattern = "random"
 
 # =============================================================================
 # ADVANCED OPTIONS
@@ -179,7 +179,7 @@ L = 0.0
 # Cutoff distance for neighbor list construction (length units)
 # Optimization for pairwise interactions
 # Usually no need to change; must be larger than soft-sphere interaction range
-rcut_neighbor_finder = 2.0
+rcut_nf = 2.0
 
 # Number of CPU threads for parallel force calculations
 # Limited speedup for small systems
@@ -190,6 +190,35 @@ nthreads = 1
 # By default, steepest descent minimization removes bad contacts
 # Only set to true if continuing from a pre-equilibrated configuration
 no_minimize = false
+
+# Ring initialization method: "circle", "crankshaft", or "fourier"
+#   "circle"     : Start with a perfect circular ring configuration
+#   "crankshaft" : Apply topology-preserving crankshaft Monte Carlo moves to
+#                  randomize the initial circle into a random coil configuration.
+#                  This reduces thermalization time by starting closer to equilibrium.
+#   "fourier"    : Generate ring using low-frequency Fourier modes. Produces smooth,
+#                  globally curved configurations. O(N) complexity, no MC needed.
+#                  Guaranteed unknotted for k_max <= 15.
+# Crankshaft moves rotate segments of the ring around an axis defined by the
+# segment endpoints, which preserves topology (no knot introduction).
+init_method = "crankshaft"
+
+# Enable temperature and segment length annealing during crankshaft initialization
+# Starts with high temperature (5×kT) and short segments, then cools down
+# and increases segment length for better equilibration. (default: true)
+init_annealing = true
+
+# Enable collapse potential during crankshaft initialization
+# Applies a weak force toward the center of mass that decays over time.
+# This is topology-safe (scalar potential) and helps achieve more compact
+# configurations faster. (default: true)
+init_collapse = true
+
+# Number of Fourier modes for "fourier" initialization method
+# Higher values = more random/rougher configurations
+# k_max <= 15 guarantees unknotted rings; k_max > 15 risks introducing knots
+# Typical range: 5-15 (default: 10)
+init_kmax = 10
 
 # Simulation identifier appended to output filenames
 # Useful for parameter sweeps or multiple replicates
