@@ -185,6 +185,15 @@ Use this flag when you need trajectories for visualization in OVITO, VMD, or sim
 
 ### Advanced Options
 
+**`--init-method`** (default: `fourier`)
+Ring initialization method: `circle` or `fourier`.
+- `circle`: Start with a perfect circular ring configuration
+- `fourier`: Generate ring using low-frequency Fourier modes. Produces smooth, globally curved configurations with O(N) complexity. Guaranteed unknotted for `k_max ≤ 15`.
+
+**`--init-kmax`** (default: 10)
+Number of Fourier modes for `fourier` initialization method.
+Higher values produce more random/rougher configurations. Keep `k_max ≤ 15` to guarantee unknotted rings.
+
 **`--L`** (default: 0.0) — *Length units*
 Periodic boundary box side length (cubic box).
 - `0.0`: Auto-calculate based on polymer size using scaling law `L = 3.0 × n^0.5887`
