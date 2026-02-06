@@ -51,4 +51,7 @@ nthreads = 1                 # Number of threads
 no_minimize = false          # Skip energy minimization
 init_method = "fourier"      # Ring initialization: "circle" or "fourier"
 init_kmax = 10               # Number of Fourier modes for "fourier" init (k_max <= 15 avoids knots)
+init_adaptive_kmax = true    # Auto-scale k_max with system size: min(15, N^0.4)
+init_thermal_scale = true    # Use thermal prefactor sqrt(kT/kbond) in mode amplitudes
+init_rg_calibrate = true     # Reserved for future Rg calibration (currently no-op)
 simid = ""                   # Simulation identifier

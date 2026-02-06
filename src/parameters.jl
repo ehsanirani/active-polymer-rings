@@ -37,6 +37,9 @@ mutable struct Parameters <: AbstractParameters
     # Initialization method
     init_method::Symbol        # :circle or :fourier
     init_kmax::Int64           # Number of Fourier modes for :fourier init method
+    init_adaptive_kmax::Bool   # Auto-scale k_max with system size
+    init_thermal_scale::Bool   # Use thermal prefactor sqrt(kT/kbond) in mode amplitudes
+    init_rg_calibrate::Bool    # Calibrate to target equilibrium Rg
 
     # Single ring parameters (used when system_type == :single)
     n_monomers::Int64
@@ -60,6 +63,9 @@ function Parameters(; system_type::Symbol=:single,
                    # Initialization method
                    init_method=:fourier,
                    init_kmax=10,
+                   init_adaptive_kmax=true,
+                   init_thermal_scale=true,
+                   init_rg_calibrate=true,
                    # Single ring
                    n_monomers=100, n_active=0,
                    # Double ring
@@ -108,7 +114,7 @@ function Parameters(; system_type::Symbol=:single,
         msd_com, msd_time_averaged, export_xyz, metrics_format,
         nthreads, γ, rcut_nf, L,
         activity_pattern,
-        init_method, init_kmax,
+        init_method, init_kmax, init_adaptive_kmax, init_thermal_scale, init_rg_calibrate,
         n_monomers, n_active,
         n_monomers_1, n_monomers_2, n_active_1, n_active_2
     )

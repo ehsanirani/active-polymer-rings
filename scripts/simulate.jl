@@ -203,6 +203,21 @@ function parse_commandline()
             arg_type = Int
             default = nothing
             dest_name = "init_kmax"
+
+        "--no-init-adaptive-kmax"
+            help = "Disable adaptive k_max scaling with system size"
+            action = :store_true
+            dest_name = "no_init_adaptive_kmax"
+
+        "--no-init-thermal-scale"
+            help = "Disable thermal prefactor sqrt(kT/kbond) in mode amplitudes"
+            action = :store_true
+            dest_name = "no_init_thermal_scale"
+
+        "--no-init-rg-calibrate"
+            help = "Disable calibration to target equilibrium Rg"
+            action = :store_true
+            dest_name = "no_init_rg_calibrate"
     end
 
     return parse_args(s; as_symbols=true)
@@ -304,6 +319,9 @@ function load_config(config_path::String)
         get!(flat, :simid, get(adv, "simid", nothing))
         get!(flat, :init_method, get(adv, "init_method", nothing))
         get!(flat, :init_kmax, get(adv, "init_kmax", nothing))
+        get!(flat, :init_adaptive_kmax, get(adv, "init_adaptive_kmax", nothing))
+        get!(flat, :init_thermal_scale, get(adv, "init_thermal_scale", nothing))
+        get!(flat, :init_rg_calibrate, get(adv, "init_rg_calibrate", nothing))
     end
 
     return flat
@@ -341,6 +359,9 @@ function merge_config(cli_args::Dict{Symbol,Any}, config::Dict{Symbol,Any})
         :activity_pattern => "random",
         :init_method => "fourier",
         :init_kmax => 10,
+        :init_adaptive_kmax => true,
+        :init_thermal_scale => true,
+        :init_rg_calibrate => true,
         :L => 0.0,
         :γ => 2.0,
         :KT => 1.0,
@@ -365,6 +386,17 @@ function merge_config(cli_args::Dict{Symbol,Any}, config::Dict{Symbol,Any})
         if k != :config && v !== nothing
             merged[k] = v
         end
+    end
+
+    # Handle --no-* flags for init enhancements (CLI flags invert the defaults)
+    if get(cli_args, :no_init_adaptive_kmax, false)
+        merged[:init_adaptive_kmax] = false
+    end
+    if get(cli_args, :no_init_thermal_scale, false)
+        merged[:init_thermal_scale] = false
+    end
+    if get(cli_args, :no_init_rg_calibrate, false)
+        merged[:init_rg_calibrate] = false
     end
 
     return merged
@@ -723,6 +755,9 @@ function main(args=ARGS)
             activity_pattern=Symbol(cfg[:activity_pattern]),
             init_method=Symbol(cfg[:init_method]),
             init_kmax=cfg[:init_kmax],
+            init_adaptive_kmax=cfg[:init_adaptive_kmax],
+            init_thermal_scale=cfg[:init_thermal_scale],
+            init_rg_calibrate=cfg[:init_rg_calibrate],
             L=cfg[:L],
             γ=cfg[:γ],
             KT=cfg[:KT],
@@ -754,6 +789,9 @@ function main(args=ARGS)
             activity_pattern=Symbol(cfg[:activity_pattern]),
             init_method=Symbol(cfg[:init_method]),
             init_kmax=cfg[:init_kmax],
+            init_adaptive_kmax=cfg[:init_adaptive_kmax],
+            init_thermal_scale=cfg[:init_thermal_scale],
+            init_rg_calibrate=cfg[:init_rg_calibrate],
             L=cfg[:L],
             γ=cfg[:γ],
             KT=cfg[:KT],

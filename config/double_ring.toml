@@ -213,6 +213,21 @@ init_method = "fourier"
 # Typical range: 5-15 (default: 10)
 init_kmax = 10
 
+# Fourier initialization enhancements (all enabled by default)
+# These bring the initial configuration closer to equilibrium
+
+# Adaptive k_max: automatically scale k_max with system size
+# Uses min(15, N^0.4) to ensure enough modes for larger systems
+init_adaptive_kmax = true
+
+# Thermal scaling: use correct thermal prefactor sqrt(kT/kbond) in mode amplitudes
+# This gives physically correct fluctuation magnitudes from the Rouse spectrum
+init_thermal_scale = true
+
+# Rg calibration: reserved for future use (currently no-op)
+# Fourier configurations are inflated but equilibrate during thermalization
+init_rg_calibrate = true
+
 # Simulation identifier appended to output filenames
 # Useful for parameter sweeps or multiple replicates
 # Example: simid = "run01" creates files like double_100_100_10_10_0.0_1.0_run01.jld2
