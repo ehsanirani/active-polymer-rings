@@ -1,26 +1,25 @@
 using Statistics
-using LinearAlgebra: norm, dot, cross
+using LinearAlgebra: norm
 
 export create_bodies, create_initial_system
-export randomize_ring_crankshaft!
 
 function create_bodies(params::Parameters)
     L = params.L
     boundary = CubicBoundary(L, L, L)
-    
+
     n_particles = get_n_particles(params)
     activity = get_activity_vector(params)
-    
+
     atoms = [Particle(id, 1.0, 1.0, 1.0, activity[id],
                       SVector(0.0, 0.0, 0.0),
                       SVector(0.0, 0.0, 0.0),
                       SVector(0, 0, 0)) for id in 1:n_particles]
-    
+
     coords = initialize_polymer_coords(params, boundary)
     velocities = [random_velocity(1.0, params.KT) for _ in 1:n_particles]
-    
+
     neighbor_finder = create_neighbor_finder(coords, params.rcut_nf)
-    
+
     return SimBodies(atoms, coords, velocities, boundary, activity, neighbor_finder)
 end
 
@@ -33,72 +32,45 @@ function initialize_polymer_coords(params::Parameters, boundary)
 end
 
 function initialize_single_ring(params::Parameters, boundary)
-    # Fourier method: direct generation using low-frequency modes
     if params.init_method == :fourier
         return initialize_ring_fourier(params.n_monomers, boundary;
             k_max=params.init_kmax, bond_length=0.97)
+    else  # :circle
+        _, wrapped = place_polymer_ring(params.n_monomers, boundary; σ=0.97)
+        return wrapped
     end
-
-    # Circle-based initialization (used for :circle and :crankshaft)
-    _, wrapped = place_polymer_ring(params.n_monomers, boundary; σ=0.97)
-
-    # Apply crankshaft randomization if requested
-    if params.init_method == :crankshaft
-        n_moves = 10 * params.n_monomers
-        wrapped, acc_rate = randomize_ring_crankshaft!(wrapped;
-            n_moves=n_moves,
-            kT=params.KT,
-            σ=0.97,
-            use_annealing=params.init_annealing,
-            use_collapse=params.init_collapse)
-    end
-
-    return wrapped
 end
 
 function initialize_double_ring(params::Parameters, boundary)
-    coords = place_two_rings(params.n_monomers_1, params.n_monomers_2, boundary)
-
-    # Apply crankshaft randomization if requested
-    if params.init_method == :crankshaft
+    if params.init_method == :fourier
+        # Generate each ring separately with Fourier method
         n1 = params.n_monomers_1
         n2 = params.n_monomers_2
 
-        # Split coordinates for each ring
-        ring1_coords = coords[1:n1]
-        ring2_coords = coords[n1+1:end]
+        ring1_coords = initialize_ring_fourier(n1, boundary;
+            k_max=params.init_kmax, bond_length=0.97)
+        ring2_coords = initialize_ring_fourier(n2, boundary;
+            k_max=params.init_kmax, bond_length=0.97)
 
-        # Randomize each ring separately
-        n_moves_1 = 10 * n1
-        n_moves_2 = 10 * n2
-        ring1_coords, _ = randomize_ring_crankshaft!(ring1_coords;
-            n_moves=n_moves_1,
-            kT=params.KT,
-            σ=0.97,
-            use_annealing=params.init_annealing,
-            use_collapse=params.init_collapse)
-        ring2_coords, _ = randomize_ring_crankshaft!(ring2_coords;
-            n_moves=n_moves_2,
-            kT=params.KT,
-            σ=0.97,
-            use_annealing=params.init_annealing,
-            use_collapse=params.init_collapse)
+        # Offset second ring to avoid overlap (simple displacement)
+        box_center = boundary.side_lengths ./ 2
+        offset = SVector(3.0, 0.0, 0.0)
+        ring2_coords = [c + offset for c in ring2_coords]
 
-        # Recombine
-        coords = vcat(ring1_coords, ring2_coords)
+        return vcat(ring1_coords, ring2_coords)
+    else  # :circle - use catenated placement
+        return place_two_rings(params.n_monomers_1, params.n_monomers_2, boundary)
     end
-
-    return coords
 end
 
 function place_polymer_ring(N, boundary; σ=1.0, remove_rcm=true, pos_1=1, pos_2=2, pos0=zeros(3))
     box_center = boundary.side_lengths ./ 2
     theta = 2π/N
     radius_of_sphere = σ / sqrt(2*(1-cos(theta)))
-    
+
     walk = [zeros(3) for _ in 1:N]
     wrapped_walk = [zeros(3) for _ in 1:N]
-    
+
     for i in 1:N
         # Create mutable array from pos0 (handle both Array and SVector)
         particle_position = collect(pos0)
@@ -107,7 +79,7 @@ function place_polymer_ring(N, boundary; σ=1.0, remove_rcm=true, pos_1=1, pos_2
         particle_position[pos_2] = sin(theta*(i-1))
         walk[i] = particle_position .* radius_of_sphere
     end
-    
+
     if remove_rcm
         rcm = zeros(3)
         for j in 1:3
@@ -118,7 +90,7 @@ function place_polymer_ring(N, boundary; σ=1.0, remove_rcm=true, pos_1=1, pos_2
             wrapped_walk[i] = wrap_coords(walk[i], boundary)
         end
     end
-    
+
     swalk = [SVector(s0...) for s0 in walk]
     swrapped_walk = [SVector(s0...) for s0 in wrapped_walk]
     return swalk, swrapped_walk
@@ -196,205 +168,6 @@ function initialize_ring_fourier(N::Int, boundary;
     coords = [box_center + (c - box_center) * scale for c in coords]
 
     return coords
-end
-
-"""
-    rotate_around_axis(point, pivot, axis, angle)
-
-Rotate a point around an axis passing through pivot by the given angle (radians).
-Uses Rodrigues' rotation formula.
-"""
-function rotate_around_axis(point::SVector{3,Float64}, pivot::SVector{3,Float64},
-                            axis::SVector{3,Float64}, angle::Float64)
-    # Translate point to origin (pivot as origin)
-    v = point - pivot
-
-    # Rodrigues' rotation formula: v' = v*cos(θ) + (k×v)*sin(θ) + k*(k·v)*(1-cos(θ))
-    cosθ = cos(angle)
-    sinθ = sin(angle)
-    k_dot_v = dot(axis, v)
-
-    v_rot = v * cosθ + cross(axis, v) * sinθ + axis * k_dot_v * (1 - cosθ)
-
-    # Translate back
-    return v_rot + pivot
-end
-
-"""
-    crankshaft_move!(coords, i, j)
-
-Apply a crankshaft rotation to monomers in segment [i, j] of a ring polymer.
-The rotation axis is defined by monomers i-1 and j+1 (with periodic indexing).
-Returns the rotation angle used.
-"""
-function crankshaft_move!(coords::Vector{SVector{3,Float64}}, i::Int, j::Int, angle::Float64)
-    n = length(coords)
-
-    # Get pivot points (with periodic indexing for ring)
-    p1 = coords[mod1(i - 1, n)]  # pivot start
-    p2 = coords[mod1(j + 1, n)]  # pivot end
-
-    # Rotation axis (normalized)
-    axis_vec = p2 - p1
-    axis_len = norm(axis_vec)
-    if axis_len < 1e-10
-        return  # Degenerate case, skip move
-    end
-    axis = axis_vec / axis_len
-
-    # Rotate monomers from i to j around axis
-    # Handle wrap-around for ring indices
-    if i <= j
-        for k in i:j
-            coords[k] = rotate_around_axis(coords[k], p1, axis, angle)
-        end
-    else
-        # Wrap around: i to n, then 1 to j
-        for k in i:n
-            coords[k] = rotate_around_axis(coords[k], p1, axis, angle)
-        end
-        for k in 1:j
-            coords[k] = rotate_around_axis(coords[k], p1, axis, angle)
-        end
-    end
-end
-
-"""
-    compute_soft_energy(coords, σ)
-
-Compute soft-sphere pairwise energy for all non-bonded pairs.
-Uses the same soft-sphere potential as Molly: E = (σ/r)^12
-"""
-function compute_soft_energy(coords::Vector{SVector{3,Float64}}, σ::Float64)
-    n = length(coords)
-    energy = 0.0
-    σ12 = σ^12
-
-    for i in 1:(n-2)
-        for j in (i+2):n
-            # Skip bonded neighbors (i,i+1) and (n,1) for ring
-            if i == 1 && j == n
-                continue  # Ring bond
-            end
-            r = norm(coords[i] - coords[j])
-            if r < 2.0 * σ  # Cutoff
-                energy += σ12 / r^12
-            end
-        end
-    end
-    return energy
-end
-
-"""
-    apply_collapse_force!(coords, λ)
-
-Apply a soft collapse force toward the center of mass.
-This is topology-safe as it only applies a scalar potential.
-"""
-function apply_collapse_force!(coords::Vector{SVector{3,Float64}}, λ::Float64)
-    n = length(coords)
-
-    # Compute center of mass
-    com = sum(coords) / n
-
-    # Apply soft push toward COM
-    for i in eachindex(coords)
-        displacement = com - coords[i]
-        coords[i] = coords[i] + λ * displacement
-    end
-end
-
-"""
-    randomize_ring_crankshaft!(coords; n_moves, kT, σ, use_annealing, use_collapse)
-
-Apply crankshaft Monte Carlo moves to randomize a ring polymer configuration.
-Uses Metropolis criterion with soft-sphere energy to avoid overlaps.
-
-Enhanced with optional temperature/segment annealing and collapse potential
-for faster convergence toward equilibrium-like configurations.
-
-Arguments:
-- `coords`: Vector of SVector{3,Float64} positions (modified in place)
-- `n_moves`: Number of MC moves (default: 10 * n)
-- `kT`: Temperature for Metropolis criterion
-- `σ`: Monomer diameter for soft-sphere energy
-- `use_annealing`: Enable temperature and segment length annealing (default: true)
-- `use_collapse`: Enable collapse potential toward center of mass (default: true)
-
-Returns (coords, acceptance_rate).
-"""
-function randomize_ring_crankshaft!(coords::Vector{SVector{3,Float64}};
-                                    n_moves::Int=0,
-                                    kT::Float64=1.0,
-                                    σ::Float64=0.97,
-                                    use_annealing::Bool=true,
-                                    use_collapse::Bool=true)
-    n = length(coords)
-
-    # Default: 10 moves per monomer
-    if n_moves <= 0
-        n_moves = 10 * n
-    end
-
-    accepted = 0
-    old_coords = similar(coords)
-
-    for step in 1:n_moves
-        # Fractional progress through the moves
-        t_frac = step / n_moves
-
-        # A: Temperature annealing - start hot (5×kT), cool exponentially
-        kT_eff = use_annealing ? kT * (5.0 * exp(-3.0 * t_frac)) : kT
-
-        # B: Segment length annealing - start short (3), grow to longer (max 18)
-        if use_annealing
-            max_seg = min(n ÷ 2, 3 + round(Int, 15 * t_frac))
-        else
-            max_seg = min(n ÷ 2, 10)
-        end
-
-        # C: Collapse potential (decays over first 70% of moves)
-        # Apply only every 10 steps to avoid over-collapsing
-        if use_collapse && t_frac < 0.7 && step % 10 == 0
-            λ = 0.02 * (1 - t_frac / 0.7)  # Decay from 0.02 to 0 at 70% of moves
-            apply_collapse_force!(coords, λ)
-        end
-
-        # Random segment selection
-        i = rand(1:n)
-
-        # Segment length: at least 2, at most max_seg
-        segment_len = rand(2:max_seg)
-
-        # End point (with wrap-around)
-        j = mod1(i + segment_len - 1, n)
-
-        # Skip if segment is too close to full ring (need at least 2 fixed pivots)
-        if segment_len >= n - 2
-            continue
-        end
-
-        # Random rotation angle in [-π/2, π/2]
-        angle = (rand() - 0.5) * π
-
-        # Store old coords for rejection
-        copyto!(old_coords, coords)
-        old_energy = compute_soft_energy(coords, σ)
-
-        # Apply move
-        crankshaft_move!(coords, i, j, angle)
-        new_energy = compute_soft_energy(coords, σ)
-
-        # Metropolis acceptance with effective temperature
-        ΔE = new_energy - old_energy
-        if ΔE < 0 || rand() < exp(-ΔE / kT_eff)
-            accepted += 1
-        else
-            copyto!(coords, old_coords)  # reject
-        end
-    end
-
-    return coords, accepted / n_moves
 end
 
 function create_neighbor_finder(coords::Vector, rcut::Float64)

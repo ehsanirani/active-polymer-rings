@@ -35,9 +35,7 @@ mutable struct Parameters <: AbstractParameters
     activity_pattern::Symbol   # :random or :block
 
     # Initialization method
-    init_method::Symbol        # :circle, :crankshaft, or :fourier
-    init_annealing::Bool       # Enable temperature/segment annealing during init
-    init_collapse::Bool        # Enable collapse potential during init
+    init_method::Symbol        # :circle or :fourier
     init_kmax::Int64           # Number of Fourier modes for :fourier init method
 
     # Single ring parameters (used when system_type == :single)
@@ -61,8 +59,6 @@ function Parameters(; system_type::Symbol=:single,
                    activity_pattern=:random,
                    # Initialization method
                    init_method=:fourier,
-                   init_annealing=true,
-                   init_collapse=true,
                    init_kmax=10,
                    # Single ring
                    n_monomers=100, n_active=0,
@@ -101,8 +97,8 @@ function Parameters(; system_type::Symbol=:single,
     end
     
     # Validate init_method
-    if init_method ∉ (:circle, :crankshaft, :fourier)
-        error("init_method must be :circle, :crankshaft, or :fourier, got $init_method")
+    if init_method ∉ (:circle, :fourier)
+        error("init_method must be :circle or :fourier, got $init_method")
     end
 
     Parameters(
@@ -112,7 +108,7 @@ function Parameters(; system_type::Symbol=:single,
         msd_com, msd_time_averaged, export_xyz, metrics_format,
         nthreads, γ, rcut_nf, L,
         activity_pattern,
-        init_method, init_annealing, init_collapse, init_kmax,
+        init_method, init_kmax,
         n_monomers, n_active,
         n_monomers_1, n_monomers_2, n_active_1, n_active_2
     )

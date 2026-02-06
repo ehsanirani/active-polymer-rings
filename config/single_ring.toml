@@ -191,28 +191,12 @@ nthreads = 1
 # Only set to true if continuing from a pre-equilibrated configuration
 no_minimize = false
 
-# Ring initialization method: "circle", "crankshaft", or "fourier"
-#   "circle"     : Start with a perfect circular ring configuration
-#   "crankshaft" : Apply topology-preserving crankshaft Monte Carlo moves to
-#                  randomize the initial circle into a random coil configuration.
-#                  This reduces thermalization time by starting closer to equilibrium.
-#   "fourier"    : Generate ring using low-frequency Fourier modes. Produces smooth,
-#                  globally curved configurations. O(N) complexity, no MC needed.
-#                  Guaranteed unknotted for k_max <= 15.
-# Crankshaft moves rotate segments of the ring around an axis defined by the
-# segment endpoints, which preserves topology (no knot introduction).
+# Ring initialization method: "circle" or "fourier"
+#   "circle"  : Start with a perfect circular ring configuration
+#   "fourier" : Generate ring using low-frequency Fourier modes. Produces smooth,
+#               globally curved configurations. O(N) complexity.
+#               Guaranteed unknotted for k_max <= 15.
 init_method = "fourier"
-
-# Enable temperature and segment length annealing during crankshaft initialization
-# Starts with high temperature (5×kT) and short segments, then cools down
-# and increases segment length for better equilibration. (default: true)
-init_annealing = true
-
-# Enable collapse potential during crankshaft initialization
-# Applies a weak force toward the center of mass that decays over time.
-# This is topology-safe (scalar potential) and helps achieve more compact
-# configurations faster. (default: true)
-init_collapse = true
 
 # Number of Fourier modes for "fourier" initialization method
 # Higher values = more random/rougher configurations

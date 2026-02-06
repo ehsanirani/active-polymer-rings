@@ -193,22 +193,10 @@ function parse_commandline()
             dest_name = "no_minimize"
 
         "--init-method"
-            help = "Ring initialization method: circle, crankshaft, or fourier"
+            help = "Ring initialization method: circle or fourier"
             arg_type = String
             default = nothing
             dest_name = "init_method"
-
-        "--init-annealing"
-            help = "Enable temperature/segment annealing during initialization"
-            arg_type = Bool
-            default = nothing
-            dest_name = "init_annealing"
-
-        "--init-collapse"
-            help = "Enable collapse potential during initialization"
-            arg_type = Bool
-            default = nothing
-            dest_name = "init_collapse"
 
         "--init-kmax"
             help = "Number of Fourier modes for :fourier init method"
@@ -315,8 +303,6 @@ function load_config(config_path::String)
         get!(flat, :no_minimize, get(adv, "no_minimize", nothing))
         get!(flat, :simid, get(adv, "simid", nothing))
         get!(flat, :init_method, get(adv, "init_method", nothing))
-        get!(flat, :init_annealing, get(adv, "init_annealing", nothing))
-        get!(flat, :init_collapse, get(adv, "init_collapse", nothing))
         get!(flat, :init_kmax, get(adv, "init_kmax", nothing))
     end
 
@@ -354,8 +340,6 @@ function merge_config(cli_args::Dict{Symbol,Any}, config::Dict{Symbol,Any})
         :metrics_format => "jld2",
         :activity_pattern => "random",
         :init_method => "fourier",
-        :init_annealing => true,
-        :init_collapse => true,
         :init_kmax => 10,
         :L => 0.0,
         :γ => 2.0,
@@ -738,8 +722,6 @@ function main(args=ARGS)
             metrics_format=Symbol(cfg[:metrics_format]),
             activity_pattern=Symbol(cfg[:activity_pattern]),
             init_method=Symbol(cfg[:init_method]),
-            init_annealing=cfg[:init_annealing],
-            init_collapse=cfg[:init_collapse],
             init_kmax=cfg[:init_kmax],
             L=cfg[:L],
             γ=cfg[:γ],
@@ -771,8 +753,6 @@ function main(args=ARGS)
             metrics_format=Symbol(cfg[:metrics_format]),
             activity_pattern=Symbol(cfg[:activity_pattern]),
             init_method=Symbol(cfg[:init_method]),
-            init_annealing=cfg[:init_annealing],
-            init_collapse=cfg[:init_collapse],
             init_kmax=cfg[:init_kmax],
             L=cfg[:L],
             γ=cfg[:γ],

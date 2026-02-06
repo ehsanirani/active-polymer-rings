@@ -201,30 +201,13 @@ nthreads = 1
 # Only set to true if continuing from a pre-equilibrated configuration
 no_minimize = false
 
-# Ring initialization method: "circle", "crankshaft", or "fourier"
-#   "circle"     : Start with perfect circular ring configurations
-#   "crankshaft" : Apply topology-preserving crankshaft Monte Carlo moves to
-#                  randomize each ring into a random coil configuration.
-#                  This reduces thermalization time by starting closer to equilibrium.
-#                  Each ring is randomized independently while maintaining catenation.
-#   "fourier"    : (Single rings only) Generate ring using low-frequency Fourier modes.
-#                  Not recommended for double rings as catenation is not guaranteed.
-# Crankshaft moves rotate segments of the ring around an axis defined by the
-# segment endpoints, which preserves topology (no knot introduction).
+# Ring initialization method: "circle" or "fourier"
+#   "circle"  : Start with perfect catenated circular ring configurations
+#   "fourier" : Generate each ring using low-frequency Fourier modes with offset.
+#               Note: Does not guarantee catenation; rings are placed separately.
 init_method = "fourier"
 
-# Enable temperature and segment length annealing during crankshaft initialization
-# Starts with high temperature (5×kT) and short segments, then cools down
-# and increases segment length for better equilibration. (default: true)
-init_annealing = true
-
-# Enable collapse potential during crankshaft initialization
-# Applies a weak force toward the center of mass that decays over time.
-# This is topology-safe (scalar potential) and helps achieve more compact
-# configurations faster. (default: true)
-init_collapse = true
-
-# Number of Fourier modes for "fourier" initialization method (single rings only)
+# Number of Fourier modes for "fourier" initialization method
 # Higher values = more random/rougher configurations
 # k_max <= 15 guarantees unknotted rings
 # Typical range: 5-15 (default: 10)
