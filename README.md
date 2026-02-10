@@ -215,6 +215,78 @@ Useful for running parameter sweeps or multiple replicates: e.g., `--simid run01
 Number of CPU threads for parallel force calculations.
 Limited speedup for small systems. Consider using for `n_monomers > 500`.
 
+### Checkpointing and State Management
+
+ActiveRings supports saving and loading simulation states, enabling:
+- Periodic checkpoints during long simulations
+- Resuming crashed simulations from the last checkpoint
+- Reusing equilibrated states as starting points for multiple runs
+
+**`--checkpoint-interval`** (default: 0)
+Save checkpoint every N steps during simulation. Set to 0 to disable checkpointing.
+Example: `--checkpoint-interval 100000` saves state every 100k steps.
+
+**`--checkpoint-dir`** (default: `_data/checkpoints`)
+Directory for checkpoint files. Checkpoints are saved with descriptive filenames:
+- `checkpoint_thermal_step100000.jld2`
+- `checkpoint_active_step200000.jld2`
+
+**`--checkpoint-keep`** (default: 2)
+Number of checkpoints to keep per phase. Older checkpoints are automatically deleted to save disk space (rolling checkpoints).
+
+**`--save-state`**
+Save final simulation state to specified file. Useful for creating reusable equilibrated configurations.
+Example: `--save-state "_data/states/equilibrated_N200.jld2"`
+
+**`--load-state`**
+Load initial state from a previously saved file. Skips initialization and uses coordinates, velocities, and optionally activity pattern from the saved state.
+Example: `--load-state "_data/states/equilibrated_N200.jld2"`
+
+**`--load-activity`** (default: `new`)
+How to handle activity pattern when loading state:
+- `new`: Generate fresh activity pattern from current params (`--n-active`, `--activity-pattern`)
+- `keep`: Use the activity pattern from the saved state
+
+**`--resume`**
+Resume from the latest checkpoint in `--checkpoint-dir`. Automatically finds the most recent checkpoint and continues the simulation. Implies `--load-activity keep`.
+
+#### Checkpointing Examples
+
+**Run with periodic checkpoints**
+```bash
+julia --project=. scripts/simulate.jl \
+  --n-monomers 200 --n-active 50 --fact 5.0 \
+  --n-steps 3000000 \
+  --checkpoint-interval 100000 \
+  --checkpoint-dir "_data/checkpoints/run1"
+```
+
+**Resume a crashed simulation**
+```bash
+julia --project=. scripts/simulate.jl \
+  --n-monomers 200 --n-active 50 --fact 5.0 \
+  --n-steps 3000000 \
+  --resume \
+  --checkpoint-dir "_data/checkpoints/run1"
+```
+
+**Save equilibrated passive state for reuse**
+```bash
+julia --project=. scripts/simulate.jl \
+  --n-monomers 200 --n-active 0 \
+  --thermal-steps 2000000 --n-steps 0 \
+  --save-state "_data/states/passive_N200.jld2"
+```
+
+**Load saved state with different activity**
+```bash
+julia --project=. scripts/simulate.jl \
+  --load-state "_data/states/passive_N200.jld2" \
+  --n-monomers 200 --n-active 100 --fact 5.0 \
+  --load-activity new \
+  --n-steps 3000000
+```
+
 ### Common Parameter Combinations
 
 **Equilibrium polymer (thermal fluctuations only)**

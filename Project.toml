@@ -4,6 +4,7 @@ authors = ["Ehsan Irani"]
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 CellListMap = "69e1c6dd-3888-40e6-b3c8-31ac5f578864"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Glob = "c27321d9-0574-5035-807b-f59d2c89b15c"

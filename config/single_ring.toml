@@ -223,3 +223,23 @@ init_rg_calibrate = true
 # Useful for parameter sweeps or multiple replicates
 # Example: simid = "run01" creates files like single_100_10_0.0_1.0_run01.jld2
 simid = ""
+
+# =============================================================================
+# CHECKPOINTING
+# =============================================================================
+
+[checkpoint]
+# Steps between checkpoints (0 = disabled)
+# Checkpoints allow resuming crashed simulations
+# Example: 100000 saves state every 100k steps
+interval = 0
+
+# Directory for checkpoint files
+# Checkpoints are saved with filenames like:
+#   checkpoint_thermal_step100000.jld2
+#   checkpoint_active_step200000.jld2
+directory = "_data/checkpoints"
+
+# Number of checkpoints to keep (older ones are deleted)
+# Rolling checkpoints save disk space while maintaining recovery capability
+keep = 2

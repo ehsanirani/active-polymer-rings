@@ -218,6 +218,47 @@ function parse_commandline()
             help = "Disable calibration to target equilibrium Rg"
             action = :store_true
             dest_name = "no_init_rg_calibrate"
+
+        # Checkpointing options
+        "--save-state"
+            help = "Save final state to this file"
+            arg_type = String
+            default = nothing
+            dest_name = "save_state"
+
+        "--load-state"
+            help = "Load initial state from this file"
+            arg_type = String
+            default = nothing
+            dest_name = "load_state"
+
+        "--load-activity"
+            help = "Activity pattern when loading state: new (from params) or keep (from state)"
+            arg_type = String
+            default = nothing
+            dest_name = "load_activity"
+
+        "--checkpoint-interval"
+            help = "Save checkpoint every N steps (0 = disabled)"
+            arg_type = Int
+            default = nothing
+            dest_name = "checkpoint_interval"
+
+        "--checkpoint-dir"
+            help = "Directory for checkpoint files"
+            arg_type = String
+            default = nothing
+            dest_name = "checkpoint_dir"
+
+        "--checkpoint-keep"
+            help = "Keep last N checkpoints"
+            arg_type = Int
+            default = nothing
+            dest_name = "checkpoint_keep"
+
+        "--resume"
+            help = "Resume from latest checkpoint (implies --load-activity keep)"
+            action = :store_true
     end
 
     return parse_args(s; as_symbols=true)
@@ -324,6 +365,14 @@ function load_config(config_path::String)
         get!(flat, :init_rg_calibrate, get(adv, "init_rg_calibrate", nothing))
     end
 
+    # Checkpoint
+    if haskey(config, "checkpoint")
+        cp = config["checkpoint"]
+        get!(flat, :checkpoint_interval, get(cp, "interval", nothing))
+        get!(flat, :checkpoint_dir, get(cp, "directory", nothing))
+        get!(flat, :checkpoint_keep, get(cp, "keep", nothing))
+    end
+
     return flat
 end
 
@@ -369,6 +418,14 @@ function merge_config(cli_args::Dict{Symbol,Any}, config::Dict{Symbol,Any})
         :nthreads => 1,
         :simid => "",
         :no_minimize => false,
+        # Checkpoint defaults
+        :checkpoint_interval => 0,
+        :checkpoint_dir => "_data/checkpoints",
+        :checkpoint_keep => 2,
+        :load_activity => "new",
+        :save_state => "",
+        :load_state => "",
+        :resume => false,
     )
 
     # Start with defaults
@@ -486,7 +543,11 @@ function Molly.log_property!(logger::ProgressLogger, sys, buffers, neighbors=not
     end
 end
 
-function run_thermalization(params::Parameters, sim_bodies::SimBodies; rcut_nf::Float64=2.0)
+function run_thermalization(params::Parameters, sim_bodies::SimBodies;
+                            rcut_nf::Float64=2.0,
+                            checkpoint_interval::Int=0,
+                            checkpoint_dir::String="_data/checkpoints",
+                            checkpoint_keep::Int=2)
     n_particles = get_n_particles(params)
 
     # Create progress bar
@@ -512,6 +573,15 @@ function run_thermalization(params::Parameters, sim_bodies::SimBodies; rcut_nf::
         "progress" => progress_logger
     )
 
+    # Add checkpoint logger if enabled
+    if checkpoint_interval > 0
+        loggers["checkpoint"] = CheckpointLogger(
+            checkpoint_interval, checkpoint_dir, params,
+            :thermalization, Int64(params.thermal_steps), sim_bodies;
+            keep_last=checkpoint_keep
+        )
+    end
+
     sim_bodies.neighbor_finder = create_neighbor_finder(sim_bodies.coords, rcut_nf)
     sys = create_initial_system(params, sim_bodies; loggers=loggers)
 
@@ -520,7 +590,7 @@ function run_thermalization(params::Parameters, sim_bodies::SimBodies; rcut_nf::
 
     finish!(progress_logger.progress)
     println()  # Ensure progress bar output is flushed
-    
+
     updated_bodies = SimBodies(
         atoms=sys.atoms,
         coords=sys.coords,
@@ -529,11 +599,15 @@ function run_thermalization(params::Parameters, sim_bodies::SimBodies; rcut_nf::
         activity=sim_bodies.activity,
         neighbor_finder=sim_bodies.neighbor_finder
     )
-    
+
     return sys, updated_bodies
 end
 
-function run_active_dynamics(params::Parameters, sim_bodies::SimBodies; rcut_nf::Float64=2.0)
+function run_active_dynamics(params::Parameters, sim_bodies::SimBodies;
+                             rcut_nf::Float64=2.0,
+                             checkpoint_interval::Int=0,
+                             checkpoint_dir::String="_data/checkpoints",
+                             checkpoint_keep::Int=2)
     # Create progress bar
     progress_logger = ProgressLogger(params.traj_interval, params.n_steps, "Active Dynamics")
 
@@ -556,6 +630,15 @@ function run_active_dynamics(params::Parameters, sim_bodies::SimBodies; rcut_nf:
                            compute_com=params.msd_com),
         "progress" => progress_logger
     )
+
+    # Add checkpoint logger if enabled
+    if checkpoint_interval > 0
+        loggers["checkpoint"] = CheckpointLogger(
+            checkpoint_interval, checkpoint_dir, params,
+            :active, Int64(params.n_steps), sim_bodies;
+            keep_last=checkpoint_keep
+        )
+    end
 
     sim_bodies.neighbor_finder = create_neighbor_finder(sim_bodies.coords, rcut_nf)
     sys = create_initial_system(params, sim_bodies; loggers=loggers)
@@ -591,7 +674,7 @@ function save_results(params::Parameters, thermal_sys, active_sys, sim_bodies; s
 
     if params.metrics_format == :jld2
         # Save metrics in JLD2 format
-        excluded_loggers = ["progress"]
+        excluded_loggers = ["progress", "checkpoint"]
         if !params.msd_time_averaged
             push!(excluded_loggers, "coords")  # coords only needed for time-averaged MSD
         end
@@ -678,6 +761,64 @@ function save_metrics_csv(params::Parameters, sys, output_dir::String, fname::St
     CSV.write(joinpath(output_dir, "$(fname)_$(phase_str)_rg.csv"), df_rg)
 end
 
+"""
+Save results when thermalization was skipped (only active phase data).
+"""
+function save_results_active_only(params::Parameters, active_sys, sim_bodies; simid::String="")
+    system_type = params.system_type
+
+    # Create output directories
+    mkpath("_data")
+    mkpath("_data/sims")
+    mkpath("_data/jld2")
+    mkpath("_data/csv")
+
+    # Generate filename with descriptive pattern
+    if system_type == :single
+        fname = "single_N$(params.n_monomers)_Nact$(params.n_active)_kang$(params.kangle)_fact$(params.factive)"
+    else
+        fname = "double_N1_$(params.n_monomers_1)_N2_$(params.n_monomers_2)_Nact1_$(params.n_active_1)_Nact2_$(params.n_active_2)_kang$(params.kangle)_fact$(params.factive)"
+    end
+
+    if !isempty(simid)
+        fname *= "_$(simid)"
+    end
+
+    if params.metrics_format == :jld2
+        # Save metrics in JLD2 format
+        excluded_loggers = ["progress", "checkpoint"]
+        if !params.msd_time_averaged
+            push!(excluded_loggers, "coords")
+        end
+
+        jldopen("_data/jld2/$(fname).jld2", "w"; compress=true) do file
+            file["params"] = params
+            file["active/loggers"] = Dict(k => v for (k, v) in active_sys.loggers if k ∉ excluded_loggers)
+        end
+
+        println("\n✓ Results saved:")
+        println("  JLD2: _data/jld2/$(fname).jld2")
+    else
+        # Save metrics in CSV format
+        save_metrics_csv(params, active_sys, "_data/csv", fname, :active)
+
+        # Save params to JLD2 (for reference)
+        jldopen("_data/jld2/$(fname).jld2", "w"; compress=true) do file
+            file["params"] = params
+        end
+
+        println("\n✓ Results saved:")
+        println("  CSV:  _data/csv/$(fname)_*.csv")
+        println("  JLD2: _data/jld2/$(fname).jld2 (params only)")
+    end
+
+    # Save XYZ files (only if enabled)
+    if params.export_xyz
+        save_xyz(active_sys, sim_bodies, "_data/sims/$(fname)_active.xyz")
+        println("  XYZ:  _data/sims/$(fname)_active.xyz")
+    end
+end
+
 function save_xyz(sys, sim_bodies, filename)
     n = length(sim_bodies.atoms)
     pol_bonds = sys.specific_inter_lists[1]
@@ -729,6 +870,26 @@ function main(args=ARGS)
     # Show config info
     if !isempty(cli_args[:config])
         println("\n📄 Using config: $(cli_args[:config])")
+    end
+
+    # Checkpoint settings
+    checkpoint_interval = cfg[:checkpoint_interval]
+    checkpoint_dir = cfg[:checkpoint_dir]
+    checkpoint_keep = cfg[:checkpoint_keep]
+    resume = cfg[:resume]
+    load_state_path = cfg[:load_state]
+    save_state_path = cfg[:save_state]
+    load_activity_mode = Symbol(cfg[:load_activity])
+
+    # Handle resume: find latest checkpoint
+    if resume
+        latest_checkpoint = get_latest_checkpoint(checkpoint_dir)
+        if latest_checkpoint === nothing
+            error("No checkpoint found in $(checkpoint_dir) for resume")
+        end
+        load_state_path = latest_checkpoint
+        load_activity_mode = :keep  # Resume implies keeping activity
+        println("\n🔄 Resuming from: $(latest_checkpoint)")
     end
 
     # Create parameters
@@ -807,39 +968,99 @@ function main(args=ARGS)
     println("   Active force: $(params.factive)")
     println("   Temperature: $(params.KT)")
     println("   Angle constant: $(params.kangle)")
+    if checkpoint_interval > 0
+        println("   Checkpointing: every $(checkpoint_interval) steps to $(checkpoint_dir)")
+    end
     println()
 
-    # Create bodies
-    sim_bodies = create_bodies(params)
+    # Determine starting point: fresh start or from loaded state
+    loaded_state = nothing
+    skip_thermalization = false
+    skip_minimization = false
 
-    # Energy minimization
-    minimize = !cfg[:no_minimize]
+    if !isempty(load_state_path)
+        # Load state from file
+        println("📂 Loading state from: $(load_state_path)")
+        loaded_state = load_state(load_state_path)
+        sim_bodies = create_bodies_from_state(loaded_state, params; load_activity=load_activity_mode)
+
+        # Determine what to skip based on the saved phase
+        if loaded_state.save_phase == :active
+            skip_thermalization = true
+            skip_minimization = true
+            println("   State phase: active dynamics (step $(loaded_state.current_step)/$(loaded_state.total_steps))")
+        else
+            skip_minimization = true
+            println("   State phase: thermalization (step $(loaded_state.current_step)/$(loaded_state.total_steps))")
+        end
+        println("   Activity mode: $(load_activity_mode)")
+        println()
+    else
+        # Create bodies from scratch
+        sim_bodies = create_bodies(params)
+    end
+
+    # Energy minimization (skip if loading state)
+    minimize = !cfg[:no_minimize] && !skip_minimization
     println("⚡ Step 1: Energy minimization")
-    sim_bodies, _ = init_energy_minimization(params, sim_bodies;
-                                            rcut_nf=cfg[:rcut_nf],
-                                            minimize=minimize)
-    println("   ✓ Minimization complete\n")
+    if minimize
+        sim_bodies, _ = init_energy_minimization(params, sim_bodies;
+                                                rcut_nf=cfg[:rcut_nf],
+                                                minimize=true)
+        println("   ✓ Minimization complete\n")
+    else
+        println("   ⏭ Skipped (loading from state)\n")
+    end
 
-    # Thermalization
+    # Thermalization (skip if loading from active phase)
     println("🔥 Step 2: Thermalization ($(params.thermal_steps) steps)")
-    thermal_sys, sim_bodies = run_thermalization(params, sim_bodies; rcut_nf=cfg[:rcut_nf])
-    println("   ✓ Thermalization complete\n")
-    println("   Final Rg: $(thermal_sys.loggers["rg"].Rg_total[end])")
-    println()
+    if !skip_thermalization
+        thermal_sys, sim_bodies = run_thermalization(params, sim_bodies;
+                                                     rcut_nf=cfg[:rcut_nf],
+                                                     checkpoint_interval=checkpoint_interval,
+                                                     checkpoint_dir=checkpoint_dir,
+                                                     checkpoint_keep=checkpoint_keep)
+        println("   ✓ Thermalization complete")
+        if !isempty(thermal_sys.loggers["rg"].Rg_total)
+            println("   Final Rg: $(thermal_sys.loggers["rg"].Rg_total[end])")
+        end
+        println()
+    else
+        println("   ⏭ Skipped (loaded from active phase)\n")
+        thermal_sys = nothing
+    end
 
     # Active dynamics
     println("⚛️  Step 3: Active dynamics ($(params.n_steps) steps)")
     t₀ = time()
-    active_sys = run_active_dynamics(params, sim_bodies; rcut_nf=cfg[:rcut_nf])
+    active_sys = run_active_dynamics(params, sim_bodies;
+                                     rcut_nf=cfg[:rcut_nf],
+                                     checkpoint_interval=checkpoint_interval,
+                                     checkpoint_dir=checkpoint_dir,
+                                     checkpoint_keep=checkpoint_keep)
     t₁ = time()
     println("   ✓ Active dynamics complete")
     println("   Time: $(round(t₁ - t₀, digits=1)) seconds")
-    println("   Final Rg: $(active_sys.loggers["rg"].Rg_total[end])")
+    if !isempty(active_sys.loggers["rg"].Rg_total)
+        println("   Final Rg: $(active_sys.loggers["rg"].Rg_total[end])")
+    end
     println()
+
+    # Save final state if requested
+    if !isempty(save_state_path)
+        println("💾 Saving final state to: $(save_state_path)")
+        save_state(save_state_path, sim_bodies, active_sys, params;
+                   phase=:active, step=Int64(params.n_steps), total_steps=Int64(params.n_steps))
+    end
 
     # Save results
     println("💾 Step 4: Saving results")
-    save_results(params, thermal_sys, active_sys, sim_bodies; simid=cfg[:simid])
+    if thermal_sys !== nothing
+        save_results(params, thermal_sys, active_sys, sim_bodies; simid=cfg[:simid])
+    else
+        # If we skipped thermalization, save only active results
+        save_results_active_only(params, active_sys, sim_bodies; simid=cfg[:simid])
+    end
 
     println("\n✅ Simulation complete!")
 end

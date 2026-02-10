@@ -21,6 +21,10 @@ export RgLogger, TangentLogger
 export make_logging_schedule
 export ActiveTangentForce, LangevinThermostat
 
+# State I/O and checkpointing exports
+export SimulationState, save_state, load_state, create_bodies_from_state
+export CheckpointLogger, get_latest_checkpoint
+
 # Analysis exports
 export gyration_tensor_eigenvalues, compute_rg_timeseries
 export compute_msd, compute_rs, compute_beta
@@ -40,6 +44,8 @@ include(joinpath("forces", "langevin.jl"))
 include(joinpath("utils", "polymer.jl"))
 include(joinpath("utils", "logging_schedule.jl"))
 include(joinpath("utils", "loggers.jl"))
+include(joinpath("utils", "state_io.jl"))
+include(joinpath("utils", "checkpoint_logger.jl"))
 
 # System builders
 include(joinpath("systems", "single_ring.jl"))
