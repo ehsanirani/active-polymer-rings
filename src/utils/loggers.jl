@@ -83,33 +83,39 @@ struct MSDLogger
     log_steps::Set{Int64}
     step_indices::Vector{Int64}
     compute_com::Bool                              # whether to compute COM MSD
+    compute_com_frame::Bool                        # whether to compute COM-frame MSD
     system_type::Symbol
     n_monomers_1::Int64
     n_monomers_2::Int64
     reference_coords::Vector{SVector{3,Float64}}  # Reference coordinates (t=0)
     reference_com::SVector{3,Float64}              # Reference center of mass
+    reference_coords_com_frame::Vector{SVector{3,Float64}}  # Reference positions in COM frame
     msd_monomer::Vector{Float64}                   # Monomer MSD timeseries
     msd_com::Vector{Float64}                       # COM MSD timeseries
+    msd_com_frame::Vector{Float64}                 # COM-frame MSD timeseries
 end
 
 """
     MSDLogger(schedule, system_type, n_monomers_1, n_monomers_2, initial_coords, boundary;
-              compute_com=true)
+              compute_com=true, compute_com_frame=false)
 
 Create MSDLogger with reference coordinates from the first frame.
 """
 function MSDLogger(schedule::Vector{Int}, system_type::Symbol, n_monomers_1::Int64,
                    n_monomers_2::Int64, initial_coords::Vector{SVector{3,Float64}},
-                   boundary; compute_com::Bool=true)
+                   boundary; compute_com::Bool=true, compute_com_frame::Bool=false)
     # Store reference coordinates (unwrapped)
     n_total = system_type == :single ? n_monomers_1 : n_monomers_1 + n_monomers_2
     ref_coords = unwrap_polymer(initial_coords[1:n_total], boundary)
 
     # Compute reference COM
-    ref_com = compute_com ? sum(ref_coords) / length(ref_coords) : SVector{3,Float64}(0, 0, 0)
+    ref_com = (compute_com || compute_com_frame) ? sum(ref_coords) / length(ref_coords) : SVector{3,Float64}(0, 0, 0)
 
-    MSDLogger(Set{Int64}(schedule), Int64[], compute_com, system_type, n_monomers_1, n_monomers_2,
-              ref_coords, ref_com, Float64[], Float64[])
+    # Compute reference coordinates in COM frame
+    ref_coords_com_frame = compute_com_frame ? ref_coords .- Ref(ref_com) : SVector{3,Float64}[]
+
+    MSDLogger(Set{Int64}(schedule), Int64[], compute_com, compute_com_frame, system_type, n_monomers_1, n_monomers_2,
+              ref_coords, ref_com, ref_coords_com_frame, Float64[], Float64[], Float64[])
 end
 
 """
@@ -133,12 +139,25 @@ function Molly.log_property!(logger::MSDLogger, sys, buffers, neighbors=nothing,
     msd_mon = sum(d -> dot(d, d), diff) / length(diff)
     push!(logger.msd_monomer, msd_mon)
 
+    # Compute current COM (needed for COM MSD and COM-frame MSD)
+    current_com = (logger.compute_com || logger.compute_com_frame) ?
+                  sum(current_coords) / length(current_coords) : SVector{3,Float64}(0, 0, 0)
+
     # Compute COM MSD (skip if disabled)
     if logger.compute_com
-        current_com = sum(current_coords) / length(current_coords)
         com_diff = current_com - logger.reference_com
         msd_com_val = dot(com_diff, com_diff)
         push!(logger.msd_com, msd_com_val)
+    end
+
+    # Compute COM-frame MSD (skip if disabled)
+    if logger.compute_com_frame
+        # Transform current coordinates to COM frame
+        current_coords_com_frame = current_coords .- Ref(current_com)
+        # Compute MSD in COM frame
+        diff_com_frame = current_coords_com_frame .- logger.reference_coords_com_frame
+        msd_com_frame_val = sum(d -> dot(d, d), diff_com_frame) / length(diff_com_frame)
+        push!(logger.msd_com_frame, msd_com_frame_val)
     end
 end
 

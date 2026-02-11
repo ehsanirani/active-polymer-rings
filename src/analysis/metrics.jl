@@ -4,7 +4,7 @@ using Statistics
 using Random
 
 export gyration_tensor_eigenvalues, compute_rg_timeseries
-export compute_msd, compute_msd_com_timeaveraged, compute_rs, compute_beta
+export compute_msd, compute_msd_com_timeaveraged, compute_msd_com_frame, compute_rs, compute_beta
 
 """
     gyration_tensor_eigenvalues(positions::Vector{SVector{3, Float64}})
@@ -131,6 +131,47 @@ function compute_msd_com_timeaveraged(coords_history::Vector{Vector{SVector{3, F
         msd_array[t] = total_msd / m
     end
 
+    return msd_array
+end
+
+"""
+    compute_msd_com_frame(coords_history::Vector{Vector{SVector{3, Float64}}}, max_samples::Int=1000)
+
+Compute time-averaged MSD of monomers in the Center of Mass reference frame.
+
+This removes the overall polymer drift, showing only internal fluctuations.
+
+Arguments:
+- coords_history: Vector of coordinate frames
+- max_samples: Maximum number of time origins to sample
+
+Returns:
+- msd_array: COM-frame MSD values for each lag time
+"""
+function compute_msd_com_frame(coords_history::Vector{Vector{SVector{3, Float64}}}, max_samples::Int=1000)
+    n_frames = length(coords_history)
+    N = length(coords_history[1])
+
+    # Step 1: Transform all frames to COM reference frame
+    coords_com_frame = Vector{Vector{SVector{3,Float64}}}(undef, n_frames)
+    for t in 1:n_frames
+        com = sum(coords_history[t]) / N
+        coords_com_frame[t] = coords_history[t] .- Ref(com)
+    end
+
+    # Step 2: Compute time-averaged MSD on transformed coordinates
+    msd_array = Vector{Float64}(undef, n_frames-1)
+    for τ in 1:n_frames-1
+        total_msd = 0.0
+        m = min(max_samples, n_frames - τ)
+        idxs = randperm(n_frames - τ)[1:m]
+
+        for j in idxs
+            diff = coords_com_frame[j+τ] .- coords_com_frame[j]
+            total_msd += sum(d -> dot(d, d), diff)
+        end
+        msd_array[τ] = total_msd / (N * m)
+    end
     return msd_array
 end
 

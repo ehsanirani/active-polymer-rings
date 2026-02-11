@@ -1,4 +1,5 @@
 using Random
+using JLD2
 
 export AbstractParameters, Parameters
 
@@ -23,6 +24,7 @@ mutable struct Parameters <: AbstractParameters
     metric_interval::Int64     # fixed interval for metrics (0 = same as traj_interval)
     metric_npoints::Int64      # number of sample points for logspaced
     msd_com::Bool              # compute center-of-mass MSD
+    msd_com_frame::Bool        # compute MSD in center-of-mass reference frame
     msd_time_averaged::Bool    # compute time-averaged MSD in analysis (requires storing coords)
     export_xyz::Bool           # export XYZ trajectory files
     metrics_format::Symbol     # :jld2 or :csv
@@ -56,7 +58,7 @@ function Parameters(; system_type::Symbol=:single,
                    KT=1.0, mass=1.0, kbond=30.0, kangle=0.0, factive=1.0,
                    dt=0.01, dt_thermal=0.0, n_steps=100_000, thermal_steps=100_000,
                    traj_interval=500, metric_mode=:fixed, metric_interval=0, metric_npoints=1000,
-                   msd_com=false, msd_time_averaged=false, export_xyz=false, metrics_format=:jld2,
+                   msd_com=false, msd_com_frame=false, msd_time_averaged=false, export_xyz=false, metrics_format=:jld2,
                    L=0.0, nthreads=0, γ=2.0, rcut_nf=2.0,
                    # Activity distribution
                    activity_pattern=:random,
@@ -111,7 +113,7 @@ function Parameters(; system_type::Symbol=:single,
         system_type,
         KT, mass, kbond, kangle, factive, dt, dt_thermal, n_steps, thermal_steps,
         traj_interval, metric_mode, metric_interval, metric_npoints,
-        msd_com, msd_time_averaged, export_xyz, metrics_format,
+        msd_com, msd_com_frame, msd_time_averaged, export_xyz, metrics_format,
         nthreads, γ, rcut_nf, L,
         activity_pattern,
         init_method, init_kmax, init_adaptive_kmax, init_thermal_scale, init_rg_calibrate,
@@ -161,5 +163,43 @@ function get_activity_vector(params::Parameters)
             # Block pattern: active monomers at start of each ring
             return vcat(activity_1, activity_2)
         end
+    end
+end
+
+# JLD2 backward compatibility: handle old Parameters structs missing msd_com_frame field
+function JLD2.rconvert(::Type{Parameters}, x::JLD2.ReconstructedMutable{:Parameters})
+    # Get field names from the reconstructed type
+    field_names = fieldnames(typeof(x))
+
+    # Check if msd_com_frame is missing (old format)
+    if !(:msd_com_frame in field_names)
+        # Reconstruct with default msd_com_frame=false
+        return Parameters(
+            x.system_type,
+            x.KT, x.mass, x.kbond, x.kangle, x.factive, x.dt, x.dt_thermal,
+            x.n_steps, x.thermal_steps, x.traj_interval, x.metric_mode,
+            x.metric_interval, x.metric_npoints, x.msd_com,
+            false,  # msd_com_frame default
+            x.msd_time_averaged, x.export_xyz, x.metrics_format,
+            x.nthreads, x.γ, x.rcut_nf, x.L, x.activity_pattern,
+            x.init_method, x.init_kmax, x.init_adaptive_kmax,
+            x.init_thermal_scale, x.init_rg_calibrate,
+            x.n_monomers, x.n_active,
+            x.n_monomers_1, x.n_monomers_2, x.n_active_1, x.n_active_2
+        )
+    else
+        # All fields present, direct construction
+        return Parameters(
+            x.system_type,
+            x.KT, x.mass, x.kbond, x.kangle, x.factive, x.dt, x.dt_thermal,
+            x.n_steps, x.thermal_steps, x.traj_interval, x.metric_mode,
+            x.metric_interval, x.metric_npoints, x.msd_com, x.msd_com_frame,
+            x.msd_time_averaged, x.export_xyz, x.metrics_format,
+            x.nthreads, x.γ, x.rcut_nf, x.L, x.activity_pattern,
+            x.init_method, x.init_kmax, x.init_adaptive_kmax,
+            x.init_thermal_scale, x.init_rg_calibrate,
+            x.n_monomers, x.n_active,
+            x.n_monomers_1, x.n_monomers_2, x.n_active_1, x.n_active_2
+        )
     end
 end

@@ -136,6 +136,12 @@ function parse_commandline()
             default = nothing
             dest_name = "msd_com"
 
+        "--msd-com-frame"
+            help = "Enable MSD computation in center-of-mass reference frame"
+            arg_type = Bool
+            default = nothing
+            dest_name = "msd_com_frame"
+
         "--msd-time-averaged"
             help = "Enable time-averaged MSD computation (stores coords in JLD2)"
             arg_type = Bool
@@ -256,6 +262,12 @@ function parse_commandline()
             default = nothing
             dest_name = "checkpoint_keep"
 
+        "--data-dir"
+            help = "Base directory for data (csv, sims, base_states subdirs)"
+            arg_type = String
+            default = "_data"
+            dest_name = "data_dir"
+
         "--resume"
             help = "Resume from latest checkpoint (implies --load-activity keep)"
             action = :store_true
@@ -334,6 +346,7 @@ function load_config(config_path::String)
     if haskey(config, "msd")
         msd = config["msd"]
         get!(flat, :msd_com, get(msd, "msd_com", nothing))
+        get!(flat, :msd_com_frame, get(msd, "msd_com_frame", nothing))
         get!(flat, :msd_time_averaged, get(msd, "msd_time_averaged", nothing))
     end
 
@@ -402,6 +415,7 @@ function merge_config(cli_args::Dict{Symbol,Any}, config::Dict{Symbol,Any})
         :metric_interval => 0,
         :metric_npoints => 1000,
         :msd_com => false,
+        :msd_com_frame => false,
         :msd_time_averaged => false,
         :export_xyz => false,
         :metrics_format => "jld2",
@@ -418,9 +432,11 @@ function merge_config(cli_args::Dict{Symbol,Any}, config::Dict{Symbol,Any})
         :nthreads => 1,
         :simid => "",
         :no_minimize => false,
+        # Data directory
+        :data_dir => "_data",
         # Checkpoint defaults
         :checkpoint_interval => 0,
-        :checkpoint_dir => "_data/checkpoints",
+        :checkpoint_dir => "",  # Will use data_dir/checkpoints if empty
         :checkpoint_keep => 2,
         :load_activity => "new",
         :save_state => "",
@@ -454,6 +470,11 @@ function merge_config(cli_args::Dict{Symbol,Any}, config::Dict{Symbol,Any})
     end
     if get(cli_args, :no_init_rg_calibrate, false)
         merged[:init_rg_calibrate] = false
+    end
+
+    # Set checkpoint_dir default based on data_dir if not explicitly set
+    if isempty(merged[:checkpoint_dir])
+        merged[:checkpoint_dir] = joinpath(merged[:data_dir], "checkpoints")
     end
 
     return merged
@@ -569,7 +590,7 @@ function run_thermalization(params::Parameters, sim_bodies::SimBodies;
                            params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                            params.system_type == :single ? 0 : params.n_monomers_2,
                            sim_bodies.coords, sim_bodies.boundary;
-                           compute_com=params.msd_com),
+                           compute_com=params.msd_com, compute_com_frame=params.msd_com_frame),
         "progress" => progress_logger
     )
 
@@ -608,6 +629,27 @@ function run_active_dynamics(params::Parameters, sim_bodies::SimBodies;
                              checkpoint_interval::Int=0,
                              checkpoint_dir::String="_data/checkpoints",
                              checkpoint_keep::Int=2)
+    # Handle n_steps=0 case (e.g., for base state creation)
+    if params.n_steps == 0
+        # Return a minimal system with empty loggers
+        loggers = Dict(
+            "coords" => Molly.CoordinatesLogger(Float64, 1; dims=3),
+            "rg" => RgLogger(Int[], params.system_type,
+                             params.system_type == :single ? params.n_monomers : params.n_monomers_1,
+                             params.system_type == :single ? 0 : params.n_monomers_2),
+            "tangents" => TangentLogger(1, params),
+            "msd" => MSDLogger(Int[], params.system_type,
+                               params.system_type == :single ? params.n_monomers : params.n_monomers_1,
+                               params.system_type == :single ? 0 : params.n_monomers_2,
+                               sim_bodies.coords, sim_bodies.boundary;
+                               compute_com=params.msd_com, compute_com_frame=params.msd_com_frame)
+        )
+        sim_bodies.neighbor_finder = create_neighbor_finder(sim_bodies.coords, rcut_nf)
+        sys = create_initial_system(params, sim_bodies; loggers=loggers)
+        println("   ⏭ Skipped (n-steps=0)\n")
+        return sys
+    end
+
     # Create progress bar
     progress_logger = ProgressLogger(params.traj_interval, params.n_steps, "Active Dynamics")
 
@@ -627,7 +669,7 @@ function run_active_dynamics(params::Parameters, sim_bodies::SimBodies;
                            params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                            params.system_type == :single ? 0 : params.n_monomers_2,
                            sim_bodies.coords, sim_bodies.boundary;
-                           compute_com=params.msd_com),
+                           compute_com=params.msd_com, compute_com_frame=params.msd_com_frame),
         "progress" => progress_logger
     )
 
@@ -652,14 +694,16 @@ function run_active_dynamics(params::Parameters, sim_bodies::SimBodies;
     return sys
 end
 
-function save_results(params::Parameters, thermal_sys, active_sys, sim_bodies; simid::String="")
+function save_results(params::Parameters, thermal_sys, active_sys, sim_bodies; simid::String="", data_dir::String="_data")
     system_type = params.system_type
 
     # Create output directories
-    mkpath("_data")
-    mkpath("_data/sims")
-    mkpath("_data/jld2")
-    mkpath("_data/csv")
+    sims_dir = joinpath(data_dir, "sims")
+    jld2_dir = joinpath(data_dir, "jld2")
+    csv_dir = joinpath(data_dir, "csv")
+    mkpath(sims_dir)
+    mkpath(jld2_dir)
+    mkpath(csv_dir)
 
     # Generate filename with descriptive pattern
     if system_type == :single
@@ -679,37 +723,39 @@ function save_results(params::Parameters, thermal_sys, active_sys, sim_bodies; s
             push!(excluded_loggers, "coords")  # coords only needed for time-averaged MSD
         end
 
-        jldopen("_data/jld2/$(fname).jld2", "w"; compress=true) do file
+        jld2_file = joinpath(jld2_dir, "$(fname).jld2")
+        jldopen(jld2_file, "w"; compress=true) do file
             file["params"] = params
             file["thermal/loggers"] = Dict(k => v for (k, v) in thermal_sys.loggers if k ∉ excluded_loggers)
             file["active/loggers"] = Dict(k => v for (k, v) in active_sys.loggers if k ∉ excluded_loggers)
         end
 
         println("\n✓ Results saved:")
-        println("  JLD2: _data/jld2/$(fname).jld2")
+        println("  JLD2: $(jld2_file)")
         if params.msd_time_averaged
             println("        (includes coords for time-averaged MSD)")
         end
     else
         # Save metrics in CSV format
-        save_metrics_csv(params, active_sys, "_data/csv", fname, :active)
-        save_metrics_csv(params, thermal_sys, "_data/csv", fname, :thermal)
+        save_metrics_csv(params, active_sys, csv_dir, fname, :active)
+        save_metrics_csv(params, thermal_sys, csv_dir, fname, :thermal)
 
         # Save params to JLD2 (for reference)
-        jldopen("_data/jld2/$(fname).jld2", "w"; compress=true) do file
+        jld2_file = joinpath(jld2_dir, "$(fname).jld2")
+        jldopen(jld2_file, "w"; compress=true) do file
             file["params"] = params
         end
 
         println("\n✓ Results saved:")
-        println("  CSV:  _data/csv/$(fname)_*.csv")
-        println("  JLD2: _data/jld2/$(fname).jld2 (params only)")
+        println("  CSV:  $(csv_dir)/$(fname)_*.csv")
+        println("  JLD2: $(jld2_file) (params only)")
     end
 
     # Save XYZ files (only if enabled)
     if params.export_xyz
-        save_xyz(thermal_sys, sim_bodies, "_data/sims/$(fname)_thermal.xyz")
-        save_xyz(active_sys, sim_bodies, "_data/sims/$(fname)_active.xyz")
-        println("  XYZ:  _data/sims/$(fname)_{thermal,active}.xyz")
+        save_xyz(thermal_sys, sim_bodies, joinpath(sims_dir, "$(fname)_thermal.xyz"))
+        save_xyz(active_sys, sim_bodies, joinpath(sims_dir, "$(fname)_active.xyz"))
+        println("  XYZ:  $(sims_dir)/$(fname)_{thermal,active}.xyz")
     end
 end
 
@@ -740,6 +786,9 @@ function save_metrics_csv(params::Parameters, sys, output_dir::String, fname::St
     if params.msd_com && !isempty(msd_logger.msd_com)
         df_msd.msd_com = [format_val(x) for x in msd_logger.msd_com]
     end
+    if params.msd_com_frame && !isempty(msd_logger.msd_com_frame)
+        df_msd.msd_com_frame = [format_val(x) for x in msd_logger.msd_com_frame]
+    end
     CSV.write(joinpath(output_dir, "$(fname)_$(phase_str)_msd.csv"), df_msd)
 
     # Save Rg data
@@ -764,14 +813,16 @@ end
 """
 Save results when thermalization was skipped (only active phase data).
 """
-function save_results_active_only(params::Parameters, active_sys, sim_bodies; simid::String="")
+function save_results_active_only(params::Parameters, active_sys, sim_bodies; simid::String="", data_dir::String="_data")
     system_type = params.system_type
 
     # Create output directories
-    mkpath("_data")
-    mkpath("_data/sims")
-    mkpath("_data/jld2")
-    mkpath("_data/csv")
+    sims_dir = joinpath(data_dir, "sims")
+    jld2_dir = joinpath(data_dir, "jld2")
+    csv_dir = joinpath(data_dir, "csv")
+    mkpath(sims_dir)
+    mkpath(jld2_dir)
+    mkpath(csv_dir)
 
     # Generate filename with descriptive pattern
     if system_type == :single
@@ -791,31 +842,33 @@ function save_results_active_only(params::Parameters, active_sys, sim_bodies; si
             push!(excluded_loggers, "coords")
         end
 
-        jldopen("_data/jld2/$(fname).jld2", "w"; compress=true) do file
+        jld2_file = joinpath(jld2_dir, "$(fname).jld2")
+        jldopen(jld2_file, "w"; compress=true) do file
             file["params"] = params
             file["active/loggers"] = Dict(k => v for (k, v) in active_sys.loggers if k ∉ excluded_loggers)
         end
 
         println("\n✓ Results saved:")
-        println("  JLD2: _data/jld2/$(fname).jld2")
+        println("  JLD2: $(jld2_file)")
     else
         # Save metrics in CSV format
-        save_metrics_csv(params, active_sys, "_data/csv", fname, :active)
+        save_metrics_csv(params, active_sys, csv_dir, fname, :active)
 
         # Save params to JLD2 (for reference)
-        jldopen("_data/jld2/$(fname).jld2", "w"; compress=true) do file
+        jld2_file = joinpath(jld2_dir, "$(fname).jld2")
+        jldopen(jld2_file, "w"; compress=true) do file
             file["params"] = params
         end
 
         println("\n✓ Results saved:")
-        println("  CSV:  _data/csv/$(fname)_*.csv")
-        println("  JLD2: _data/jld2/$(fname).jld2 (params only)")
+        println("  CSV:  $(csv_dir)/$(fname)_*.csv")
+        println("  JLD2: $(jld2_file) (params only)")
     end
 
     # Save XYZ files (only if enabled)
     if params.export_xyz
-        save_xyz(active_sys, sim_bodies, "_data/sims/$(fname)_active.xyz")
-        println("  XYZ:  _data/sims/$(fname)_active.xyz")
+        save_xyz(active_sys, sim_bodies, joinpath(sims_dir, "$(fname)_active.xyz"))
+        println("  XYZ:  $(sims_dir)/$(fname)_active.xyz")
     end
 end
 
@@ -910,6 +963,7 @@ function main(args=ARGS)
             metric_interval=cfg[:metric_interval],
             metric_npoints=cfg[:metric_npoints],
             msd_com=cfg[:msd_com],
+            msd_com_frame=cfg[:msd_com_frame],
             msd_time_averaged=cfg[:msd_time_averaged],
             export_xyz=cfg[:export_xyz],
             metrics_format=Symbol(cfg[:metrics_format]),
@@ -944,6 +998,7 @@ function main(args=ARGS)
             metric_interval=cfg[:metric_interval],
             metric_npoints=cfg[:metric_npoints],
             msd_com=cfg[:msd_com],
+            msd_com_frame=cfg[:msd_com_frame],
             msd_time_averaged=cfg[:msd_time_averaged],
             export_xyz=cfg[:export_xyz],
             metrics_format=Symbol(cfg[:metrics_format]),
@@ -1056,10 +1111,10 @@ function main(args=ARGS)
     # Save results
     println("💾 Step 4: Saving results")
     if thermal_sys !== nothing
-        save_results(params, thermal_sys, active_sys, sim_bodies; simid=cfg[:simid])
+        save_results(params, thermal_sys, active_sys, sim_bodies; simid=cfg[:simid], data_dir=cfg[:data_dir])
     else
         # If we skipped thermalization, save only active results
-        save_results_active_only(params, active_sys, sim_bodies; simid=cfg[:simid])
+        save_results_active_only(params, active_sys, sim_bodies; simid=cfg[:simid], data_dir=cfg[:data_dir])
     end
 
     println("\n✅ Simulation complete!")

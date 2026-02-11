@@ -12,8 +12,10 @@ Export MSD data from JLD2 file to CSV files.
 Creates separate CSV files for:
 - MSD_monomer_noavg.csv (non-time-averaged monomer MSD)
 - MSD_com_noavg.csv (non-time-averaged COM MSD)
+- MSD_com_frame_noavg.csv (non-time-averaged COM-frame MSD)
 - MSD_monomer_avg.csv (time-averaged monomer MSD)
 - MSD_com_avg.csv (time-averaged COM MSD)
+- MSD_com_frame_avg.csv (time-averaged COM-frame MSD)
 """
 function export_msd_to_csv(jld2_file::String; phase::Symbol=:active, output_dir::String="_data/csv")
     println("\n" * "="^70)
@@ -66,6 +68,10 @@ function export_msd_to_csv(jld2_file::String; phase::Symbol=:active, output_dir:
     # Get non-time-averaged MSD from logger
     msd_monomer_noavg = msd_logger.msd_monomer
     msd_com_noavg = msd_logger.msd_com
+    msd_com_frame_noavg = hasproperty(msd_logger, :msd_com_frame) ? msd_logger.msd_com_frame : Float64[]
+
+    # Check COM-frame flag (with backward-compatible default)
+    do_com_frame = hasproperty(params, :msd_com_frame) ? params.msd_com_frame : false
 
     # Format function for values
     format_values(arr) = [@sprintf("%.6f", x) for x in arr]
@@ -93,9 +99,19 @@ function export_msd_to_csv(jld2_file::String; phase::Symbol=:active, output_dir:
         println("  ✓ Saved to: $filename")
     end
 
+    # Save non-time-averaged COM-frame MSD (if enabled)
+    if do_com_frame && !isempty(msd_com_frame_noavg)
+        println("Saving non-time-averaged COM-frame MSD...")
+        filename = joinpath(output_dir, "$(run_name)_MSD_com_frame_noavg.csv")
+        df = DataFrame(lag_time = lag_times, msd = format_values(msd_com_frame_noavg))
+        CSV.write(filename, df)
+        println("  ✓ Saved to: $filename")
+    end
+
     # Compute and save time-averaged MSD (if enabled)
     msd_monomer_avg = Float64[]
     msd_com_avg = Float64[]
+    msd_com_frame_avg = Float64[]
     if do_timeavg
         println("Computing time-averaged MSD...")
         msd_monomer_avg = compute_msd(coords_history)
@@ -115,6 +131,15 @@ function export_msd_to_csv(jld2_file::String; phase::Symbol=:active, output_dir:
             CSV.write(filename, df)
             println("  ✓ Saved to: $filename")
         end
+
+        if do_com_frame
+            msd_com_frame_avg = compute_msd_com_frame(coords_history)
+            println("Saving time-averaged COM-frame MSD...")
+            filename = joinpath(output_dir, "$(run_name)_MSD_com_frame_avg.csv")
+            df = DataFrame(lag_time = lag_times_avg, msd = format_values(msd_com_frame_avg))
+            CSV.write(filename, df)
+            println("  ✓ Saved to: $filename")
+        end
     end
 
     println("\n" * "="^70)
@@ -128,13 +153,16 @@ function export_msd_to_csv(jld2_file::String; phase::Symbol=:active, output_dir:
     println("  Time interval: $time_interval")
     println("  Max lag time: $(lag_times[end])")
     println("  COM MSD: $(do_com ? "enabled" : "disabled")")
+    println("  COM-frame MSD: $(do_com_frame ? "enabled" : "disabled")")
     println("  Time-averaged MSD: $(do_timeavg ? "enabled" : "disabled")")
     println()
 
     return (msd_monomer_noavg=msd_monomer_noavg,
             msd_com_noavg=msd_com_noavg,
+            msd_com_frame_noavg=msd_com_frame_noavg,
             msd_monomer_avg=msd_monomer_avg,
-            msd_com_avg=msd_com_avg)
+            msd_com_avg=msd_com_avg,
+            msd_com_frame_avg=msd_com_frame_avg)
 end
 
 # Command line interface
