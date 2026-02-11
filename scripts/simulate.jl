@@ -130,6 +130,43 @@ function parse_commandline()
             default = nothing
             dest_name = "metric_npoints"
 
+        # Per-metric logging options (override global metric settings)
+        "--msd-mode"
+            help = "Logging mode for MSD: fixed or logspaced (default: use --metric-mode)"
+            arg_type = String
+            default = nothing
+            dest_name = "msd_mode"
+
+        "--msd-interval"
+            help = "Fixed interval for MSD logging (default: use --metric-interval)"
+            arg_type = Int
+            default = nothing
+            dest_name = "msd_interval"
+
+        "--msd-npoints"
+            help = "Number of sampling points for logspaced MSD logging (default: use --metric-npoints)"
+            arg_type = Int
+            default = nothing
+            dest_name = "msd_npoints"
+
+        "--rg-mode"
+            help = "Logging mode for Rg: fixed or logspaced (default: use --metric-mode)"
+            arg_type = String
+            default = nothing
+            dest_name = "rg_mode"
+
+        "--rg-interval"
+            help = "Fixed interval for Rg logging (default: use --metric-interval)"
+            arg_type = Int
+            default = nothing
+            dest_name = "rg_interval"
+
+        "--rg-npoints"
+            help = "Number of sampling points for logspaced Rg logging (default: use --metric-npoints)"
+            arg_type = Int
+            default = nothing
+            dest_name = "rg_npoints"
+
         "--msd-com"
             help = "Enable center-of-mass MSD computation"
             arg_type = Bool
@@ -348,6 +385,19 @@ function load_config(config_path::String)
         get!(flat, :msd_com, get(msd, "msd_com", nothing))
         get!(flat, :msd_com_frame, get(msd, "msd_com_frame", nothing))
         get!(flat, :msd_time_averaged, get(msd, "msd_time_averaged", nothing))
+        # Per-metric logging options
+        get!(flat, :msd_mode, get(msd, "mode", nothing))
+        get!(flat, :msd_interval, get(msd, "interval", nothing))
+        get!(flat, :msd_npoints, get(msd, "npoints", nothing))
+    end
+
+    # Rg
+    if haskey(config, "rg")
+        rg = config["rg"]
+        # Per-metric logging options
+        get!(flat, :rg_mode, get(rg, "mode", nothing))
+        get!(flat, :rg_interval, get(rg, "interval", nothing))
+        get!(flat, :rg_npoints, get(rg, "npoints", nothing))
     end
 
     # Output
@@ -417,6 +467,13 @@ function merge_config(cli_args::Dict{Symbol,Any}, config::Dict{Symbol,Any})
         :msd_com => false,
         :msd_com_frame => false,
         :msd_time_averaged => false,
+        # Per-metric logging options (nothing = use global metric settings)
+        :msd_mode => nothing,
+        :msd_interval => nothing,
+        :msd_npoints => nothing,
+        :rg_mode => nothing,
+        :rg_interval => nothing,
+        :rg_npoints => nothing,
         :export_xyz => false,
         :metrics_format => "jld2",
         :activity_pattern => "random",
@@ -568,25 +625,41 @@ function run_thermalization(params::Parameters, sim_bodies::SimBodies;
                             rcut_nf::Float64=2.0,
                             checkpoint_interval::Int=0,
                             checkpoint_dir::String="_data/checkpoints",
-                            checkpoint_keep::Int=2)
+                            checkpoint_keep::Int=2,
+                            # Per-metric logging options (nothing = use global metric settings)
+                            msd_mode=nothing, msd_interval=nothing, msd_npoints=nothing,
+                            rg_mode=nothing, rg_interval=nothing, rg_npoints=nothing)
     n_particles = get_n_particles(params)
 
     # Create progress bar
     progress_logger = ProgressLogger(params.traj_interval, params.thermal_steps, "Thermalization")
 
-    # Compute metric logging schedule for this phase
-    metric_schedule = make_logging_schedule(
-        params.metric_mode, params.thermal_steps;
-        fixed_interval=params.metric_interval, n_points=params.metric_npoints
+    # Resolve per-metric settings (fall back to global if not specified)
+    resolved_msd_mode = msd_mode !== nothing ? Symbol(msd_mode) : params.metric_mode
+    resolved_msd_interval = msd_interval !== nothing ? msd_interval : params.metric_interval
+    resolved_msd_npoints = msd_npoints !== nothing ? msd_npoints : params.metric_npoints
+
+    resolved_rg_mode = rg_mode !== nothing ? Symbol(rg_mode) : params.metric_mode
+    resolved_rg_interval = rg_interval !== nothing ? rg_interval : params.metric_interval
+    resolved_rg_npoints = rg_npoints !== nothing ? rg_npoints : params.metric_npoints
+
+    # Compute separate logging schedules for MSD and Rg
+    msd_schedule = make_logging_schedule(
+        resolved_msd_mode, params.thermal_steps;
+        fixed_interval=resolved_msd_interval, n_points=resolved_msd_npoints
+    )
+    rg_schedule = make_logging_schedule(
+        resolved_rg_mode, params.thermal_steps;
+        fixed_interval=resolved_rg_interval, n_points=resolved_rg_npoints
     )
 
     loggers = Dict(
         "coords" => Molly.CoordinatesLogger(Float64, params.traj_interval; dims=3),
-        "rg" => RgLogger(metric_schedule, params.system_type,
+        "rg" => RgLogger(rg_schedule, params.system_type,
                           params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                           params.system_type == :single ? 0 : params.n_monomers_2),
         "tangents" => TangentLogger(params.traj_interval, params),
-        "msd" => MSDLogger(metric_schedule, params.system_type,
+        "msd" => MSDLogger(msd_schedule, params.system_type,
                            params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                            params.system_type == :single ? 0 : params.n_monomers_2,
                            sim_bodies.coords, sim_bodies.boundary;
@@ -628,7 +701,10 @@ function run_active_dynamics(params::Parameters, sim_bodies::SimBodies;
                              rcut_nf::Float64=2.0,
                              checkpoint_interval::Int=0,
                              checkpoint_dir::String="_data/checkpoints",
-                             checkpoint_keep::Int=2)
+                             checkpoint_keep::Int=2,
+                             # Per-metric logging options (nothing = use global metric settings)
+                             msd_mode=nothing, msd_interval=nothing, msd_npoints=nothing,
+                             rg_mode=nothing, rg_interval=nothing, rg_npoints=nothing)
     # Handle n_steps=0 case (e.g., for base state creation)
     if params.n_steps == 0
         # Return a minimal system with empty loggers
@@ -653,19 +729,32 @@ function run_active_dynamics(params::Parameters, sim_bodies::SimBodies;
     # Create progress bar
     progress_logger = ProgressLogger(params.traj_interval, params.n_steps, "Active Dynamics")
 
-    # Compute metric logging schedule for this phase
-    metric_schedule = make_logging_schedule(
-        params.metric_mode, params.n_steps;
-        fixed_interval=params.metric_interval, n_points=params.metric_npoints
+    # Resolve per-metric settings (fall back to global if not specified)
+    resolved_msd_mode = msd_mode !== nothing ? Symbol(msd_mode) : params.metric_mode
+    resolved_msd_interval = msd_interval !== nothing ? msd_interval : params.metric_interval
+    resolved_msd_npoints = msd_npoints !== nothing ? msd_npoints : params.metric_npoints
+
+    resolved_rg_mode = rg_mode !== nothing ? Symbol(rg_mode) : params.metric_mode
+    resolved_rg_interval = rg_interval !== nothing ? rg_interval : params.metric_interval
+    resolved_rg_npoints = rg_npoints !== nothing ? rg_npoints : params.metric_npoints
+
+    # Compute separate logging schedules for MSD and Rg
+    msd_schedule = make_logging_schedule(
+        resolved_msd_mode, params.n_steps;
+        fixed_interval=resolved_msd_interval, n_points=resolved_msd_npoints
+    )
+    rg_schedule = make_logging_schedule(
+        resolved_rg_mode, params.n_steps;
+        fixed_interval=resolved_rg_interval, n_points=resolved_rg_npoints
     )
 
     loggers = Dict(
         "coords" => Molly.CoordinatesLogger(Float64, params.traj_interval; dims=3),
-        "rg" => RgLogger(metric_schedule, params.system_type,
+        "rg" => RgLogger(rg_schedule, params.system_type,
                           params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                           params.system_type == :single ? 0 : params.n_monomers_2),
         "tangents" => TangentLogger(params.traj_interval, params),
-        "msd" => MSDLogger(metric_schedule, params.system_type,
+        "msd" => MSDLogger(msd_schedule, params.system_type,
                            params.system_type == :single ? params.n_monomers : params.n_monomers_1,
                            params.system_type == :single ? 0 : params.n_monomers_2,
                            sim_bodies.coords, sim_bodies.boundary;
@@ -1074,7 +1163,13 @@ function main(args=ARGS)
                                                      rcut_nf=cfg[:rcut_nf],
                                                      checkpoint_interval=checkpoint_interval,
                                                      checkpoint_dir=checkpoint_dir,
-                                                     checkpoint_keep=checkpoint_keep)
+                                                     checkpoint_keep=checkpoint_keep,
+                                                     msd_mode=cfg[:msd_mode],
+                                                     msd_interval=cfg[:msd_interval],
+                                                     msd_npoints=cfg[:msd_npoints],
+                                                     rg_mode=cfg[:rg_mode],
+                                                     rg_interval=cfg[:rg_interval],
+                                                     rg_npoints=cfg[:rg_npoints])
         println("   ✓ Thermalization complete")
         if !isempty(thermal_sys.loggers["rg"].Rg_total)
             println("   Final Rg: $(thermal_sys.loggers["rg"].Rg_total[end])")
@@ -1092,7 +1187,13 @@ function main(args=ARGS)
                                      rcut_nf=cfg[:rcut_nf],
                                      checkpoint_interval=checkpoint_interval,
                                      checkpoint_dir=checkpoint_dir,
-                                     checkpoint_keep=checkpoint_keep)
+                                     checkpoint_keep=checkpoint_keep,
+                                     msd_mode=cfg[:msd_mode],
+                                     msd_interval=cfg[:msd_interval],
+                                     msd_npoints=cfg[:msd_npoints],
+                                     rg_mode=cfg[:rg_mode],
+                                     rg_interval=cfg[:rg_interval],
+                                     rg_npoints=cfg[:rg_npoints])
     t₁ = time()
     println("   ✓ Active dynamics complete")
     println("   Time: $(round(t₁ - t₀, digits=1)) seconds")

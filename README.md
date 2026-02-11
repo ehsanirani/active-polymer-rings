@@ -154,6 +154,50 @@ Fixed interval for metric loggers. Only used when `--metric-mode fixed`.
 Number of sampling points for logarithmically spaced metric logging. Only used when `--metric-mode logspaced`.
 Higher values give denser temporal sampling.
 
+### Per-Metric Logging
+
+MSD and Rg can use different logging schedules. This is useful when you want logspaced MSD (to capture early-time ballistic regime) but fixed-interval Rg (to enable autocorrelation analysis with uniform sampling).
+
+**MSD-specific options** (override global metric settings for MSD only):
+
+**`--msd-mode`** (default: use `--metric-mode`)
+Logging mode for MSD: `fixed` or `logspaced`.
+
+**`--msd-interval`** (default: use `--metric-interval`)
+Fixed interval for MSD logging.
+
+**`--msd-npoints`** (default: use `--metric-npoints`)
+Number of sampling points for logspaced MSD logging.
+
+**Rg-specific options** (override global metric settings for Rg only):
+
+**`--rg-mode`** (default: use `--metric-mode`)
+Logging mode for Rg: `fixed` or `logspaced`.
+
+**`--rg-interval`** (default: use `--metric-interval`)
+Fixed interval for Rg logging.
+
+**`--rg-npoints`** (default: use `--metric-npoints`)
+Number of sampling points for logspaced Rg logging.
+
+**Example: Logspaced MSD with fixed Rg**
+```bash
+julia --project=. scripts/simulate.jl --config config/single_ring.toml \
+  --msd-mode logspaced --msd-npoints 500 \
+  --rg-mode fixed --rg-interval 100
+```
+
+These options can also be set in config files under `[msd]` and `[rg]` sections:
+```toml
+[msd]
+mode = "logspaced"
+npoints = 500
+
+[rg]
+mode = "fixed"
+interval = 100
+```
+
 ### MSD Options
 
 **`--msd-com`**

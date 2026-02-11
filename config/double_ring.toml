@@ -119,7 +119,7 @@ traj_interval = 500
 #   "logspaced" : Metrics logged at logarithmically spaced steps
 #                 Dense sampling at early times, sparse at late times
 #                 Useful for capturing early-time ballistic regime
-metric_mode = "logspaced"
+metric_mode = "fixed"
 
 # Fixed interval for metric loggers (only used when metric_mode = "fixed")
 # Set to 0 to use the same interval as traj_interval
@@ -136,6 +136,20 @@ metric_npoints = 1000
 # =============================================================================
 
 [msd]
+# Per-metric logging options (override global [logging] settings for MSD only)
+# Leave commented out to use the global metric_mode/interval/npoints from [logging]
+
+# Logging mode for MSD: "fixed" or "logspaced"
+# Logspaced is often preferred for MSD to capture early-time ballistic regime
+# mode = "logspaced"
+
+# Fixed interval for MSD logging (only used when mode = "fixed")
+# interval = 100
+
+# Number of sampling points for log-spaced MSD logging
+# Only used when mode = "logspaced"
+# npoints = 1000
+
 # Enable center-of-mass MSD computation
 # By default, only monomer MSD is computed
 # Set to true to also compute COM MSD for each ring separately
@@ -150,6 +164,25 @@ msd_com_frame = false
 # When true, coordinate trajectories are stored in JLD2 (required for time-averaging)
 # Note: This increases JLD2 file size significantly
 msd_time_averaged = false
+
+# =============================================================================
+# Rg OPTIONS
+# =============================================================================
+
+[rg]
+# Per-metric logging options (override global [logging] settings for Rg only)
+# Leave commented out to use the global metric_mode/interval/npoints from [logging]
+
+# Logging mode for Rg: "fixed" or "logspaced"
+# Fixed intervals are often preferred for Rg to enable autocorrelation analysis
+# mode = "fixed"
+
+# Fixed interval for Rg logging (only used when mode = "fixed")
+# interval = 100
+
+# Number of sampling points for log-spaced Rg logging
+# Only used when mode = "logspaced"
+# npoints = 1000
 
 # =============================================================================
 # OUTPUT OPTIONS
@@ -236,3 +269,23 @@ init_rg_calibrate = true
 # Useful for parameter sweeps or multiple replicates
 # Example: simid = "run01" creates files like double_100_100_10_10_0.0_1.0_run01.jld2
 simid = ""
+
+# =============================================================================
+# CHECKPOINTING
+# =============================================================================
+
+[checkpoint]
+# Steps between checkpoints (0 = disabled)
+# Checkpoints allow resuming crashed simulations
+# Example: 100000 saves state every 100k steps
+interval = 0
+
+# Directory for checkpoint files
+# Checkpoints are saved with filenames like:
+#   checkpoint_thermal_step100000.jld2
+#   checkpoint_active_step200000.jld2
+directory = "_data/checkpoints"
+
+# Number of checkpoints to keep (older ones are deleted)
+# Rolling checkpoints save disk space while maintaining recovery capability
+keep = 2
