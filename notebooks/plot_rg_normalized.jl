@@ -200,6 +200,33 @@ function load_rg_data(input_dir::String, pattern::String)
         println("  Loaded n_active=$n_active: $bn")
     end
 
+    # Fallback: if no n_active=0 data found, look for base state thermal CSV
+    if !haskey(data, 0)
+        # Look for base_state_creation thermal files (passive reference)
+        base_thermal_pattern = Regex(".*_base_state_creation_thermal_rg\\.csv")
+        base_thermal_files = filter(f -> occursin(base_thermal_pattern, basename(f)), all_files)
+
+        if !isempty(base_thermal_files)
+            for base_file in base_thermal_files
+                df = CSV.read(base_file, DataFrame)
+                if nrow(df) > 0
+                    # Try to extract n_monomers from base state file
+                    bn = basename(base_file)
+                    m = match(r"_N(\d+)_", bn)
+                    if m !== nothing
+                        n_monomers = parse(Int, m.captures[1])
+                    end
+
+                    println("  Loaded n_active=0 (base state thermal): $bn")
+                    if !haskey(data, 0)
+                        data[0] = DataFrame[]
+                    end
+                    push!(data[0], df)
+                end
+            end
+        end
+    end
+
     return data, n_monomers
 end
 
