@@ -253,6 +253,13 @@ ensure_base_state() {
         active)  n_active="$n_monomers" ;;
     esac
 
+    # Generate unique simid for base state creation
+    # Include run suffix if present (e.g., "base_state_creation_run0")
+    local simid="base_state_creation"
+    if [[ -n "$run_suffix" ]]; then
+        simid="base_state_creation${run_suffix}"
+    fi
+
     # Build command
     local cmd="julia --project=. scripts/simulate.jl"
     if [[ -n "$config_file" ]]; then
@@ -266,7 +273,9 @@ ensure_base_state() {
     cmd="$cmd --n-steps 0"
     cmd="$cmd --fact $fact"
     cmd="$cmd --save-state $BASE_STATE_PATH"
-    cmd="$cmd --simid base_state_creation"
+    cmd="$cmd --simid $simid"
+    # Export thermal phase to CSV (for passive Rg reference)
+    cmd="$cmd --metrics-format csv"
 
     if [[ "$dry_run" == true ]]; then
         log_dry_run "Creating base state ($base_state_type):"

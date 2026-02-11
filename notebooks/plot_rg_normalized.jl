@@ -31,6 +31,7 @@ using CairoMakie
 using Statistics
 using ArgParse
 using Printf
+using JLD2
 
 function parse_commandline()
     s = ArgParseSettings(description="Plot normalized mean Rg vs n_active",
@@ -66,9 +67,56 @@ function parse_commandline()
             help = "Resolution for PNG output"
             arg_type = Int
             default = 300
+        "--base-states-dir"
+            help = "Directory containing base state JLD2 files (fallback for passive Rg)"
+            arg_type = String
+            default = ""
     end
 
     return parse_args(s; as_symbols=true)
+end
+
+function load_rg_from_base_state(jld2_file::String)
+    """Load Rg timeseries from a base state JLD2 file (thermal phase)."""
+    try
+        data = jldopen(jld2_file, "r") do file
+            if haskey(file, "thermal/loggers")
+                loggers = file["thermal/loggers"]
+                if haskey(loggers, "rg")
+                    rg_logger = loggers["rg"]
+                    return DataFrame(Rg = rg_logger.Rg_total)
+                end
+            end
+            return nothing
+        end
+        return data
+    catch e
+        @warn "Failed to load Rg from $jld2_file: $e"
+        return nothing
+    end
+end
+
+function find_base_state_file(base_states_dir::String, run_id::Int, n_monomers::Int)
+    """Find the base state file for a given run."""
+    if isempty(base_states_dir) || !isdir(base_states_dir)
+        return nothing
+    end
+
+    # Try common naming patterns (as regex patterns)
+    patterns = [
+        Regex("passive_N$(n_monomers)_thermal.*_run$(run_id)\\.jld2"),
+        Regex("passive_N$(n_monomers)_.*_run$(run_id)\\.jld2"),
+        Regex(".*_run$(run_id)\\.jld2")
+    ]
+
+    all_files = readdir(base_states_dir)
+    for pattern in patterns
+        files = filter(f -> occursin(pattern, f), all_files)
+        if !isempty(files)
+            return joinpath(base_states_dir, first(files))
+        end
+    end
+    return nothing
 end
 
 function extract_nactive(filename::String)
@@ -125,6 +173,26 @@ function load_rg_data(input_dir::String, pattern::String)
         n_monomers = extract_nmonomers(bn)
 
         df = CSV.read(file, DataFrame)
+
+        # For n_active=0, if active phase data is empty, try thermal phase
+        if n_active == 0 && (nrow(df) == 0 || all(ismissing, df.Rg))
+            thermal_file = replace(file, "_active_rg.csv" => "_thermal_rg.csv")
+            if isfile(thermal_file)
+                df = CSV.read(thermal_file, DataFrame)
+                if nrow(df) > 0
+                    println("  Loaded n_active=$n_active (thermal): $(basename(thermal_file))")
+                    if !haskey(data, n_active)
+                        data[n_active] = DataFrame[]
+                    end
+                    push!(data[n_active], df)
+                    continue
+                end
+            end
+            # No thermal file or empty - skip
+            println("  Skipped n_active=$n_active: empty active data, no thermal fallback")
+            continue
+        end
+
         if !haskey(data, n_active)
             data[n_active] = DataFrame[]
         end
@@ -135,7 +203,7 @@ function load_rg_data(input_dir::String, pattern::String)
     return data, n_monomers
 end
 
-function load_rg_data_by_run(input_dir::String, pattern::String)
+function load_rg_data_by_run(input_dir::String, pattern::String; base_states_dir::String="")
     all_files = readdir(input_dir, join=true)
 
     # Filter for active phase Rg files matching pattern
@@ -162,6 +230,58 @@ function load_rg_data_by_run(input_dir::String, pattern::String)
         n_monomers = extract_nmonomers(bn)
 
         df = CSV.read(file, DataFrame)
+
+        # For n_active=0, if active phase data is empty, try fallbacks
+        if n_active == 0 && (nrow(df) == 0 || all(ismissing, df.Rg))
+            # Try 1: thermal phase CSV (same filename pattern)
+            thermal_file = replace(file, "_active_rg.csv" => "_thermal_rg.csv")
+            if isfile(thermal_file)
+                df = CSV.read(thermal_file, DataFrame)
+                if nrow(df) > 0
+                    println("  Loaded run$run_id, n_active=$n_active (thermal CSV): $(basename(thermal_file))")
+                    if !haskey(data_by_run, run_id)
+                        data_by_run[run_id] = Dict{Int, DataFrame}()
+                    end
+                    data_by_run[run_id][n_active] = df
+                    continue
+                end
+            end
+
+            # Try 2: base_state_creation thermal CSV (per-run base state)
+            # Look for files like *_base_state_creation_run{run_id}_thermal_rg.csv
+            base_state_thermal_pattern = Regex(".*_base_state_creation_run$(run_id)_thermal_rg\\.csv")
+            base_thermal_files = filter(f -> occursin(base_state_thermal_pattern, basename(f)), all_files)
+            if !isempty(base_thermal_files)
+                df = CSV.read(first(base_thermal_files), DataFrame)
+                if nrow(df) > 0
+                    println("  Loaded run$run_id, n_active=$n_active (base state thermal): $(basename(first(base_thermal_files)))")
+                    if !haskey(data_by_run, run_id)
+                        data_by_run[run_id] = Dict{Int, DataFrame}()
+                    end
+                    data_by_run[run_id][n_active] = df
+                    continue
+                end
+            end
+
+            # Try 3: base state JLD2 file (if it contains thermal loggers - unlikely)
+            base_state_file = find_base_state_file(base_states_dir, run_id, n_monomers)
+            if base_state_file !== nothing
+                df = load_rg_from_base_state(base_state_file)
+                if df !== nothing && nrow(df) > 0
+                    println("  Loaded run$run_id, n_active=$n_active (base state JLD2): $(basename(base_state_file))")
+                    if !haskey(data_by_run, run_id)
+                        data_by_run[run_id] = Dict{Int, DataFrame}()
+                    end
+                    data_by_run[run_id][n_active] = df
+                    continue
+                end
+            end
+
+            # No fallback available
+            println("  Skipped run$run_id, n_active=$n_active: empty active data, no fallback found")
+            continue
+        end
+
         if !haskey(data_by_run, run_id)
             data_by_run[run_id] = Dict{Int, DataFrame}()
         end
@@ -201,7 +321,8 @@ function process_global_normalization(args, tail_percent)
     # Compute passive Rg (mean over all runs if multiple)
     passive_rg_values = Float64[]
     for df in data[0]
-        push!(passive_rg_values, compute_tail_mean(df.Rg, tail_percent))
+        rg_values = Vector{Float64}(df.Rg)
+        push!(passive_rg_values, compute_tail_mean(rg_values, tail_percent))
     end
     passive_rg = mean(passive_rg_values)
     println("Passive Rg (n_active=0, $(length(data[0])) runs): $(round(passive_rg, digits=4))")
@@ -221,7 +342,8 @@ function process_global_normalization(args, tail_percent)
         # Compute mean Rg for each run
         run_means = Float64[]
         for df in dfs
-            push!(run_means, compute_tail_mean(df.Rg, tail_percent))
+            rg_values = Vector{Float64}(df.Rg)
+            push!(run_means, compute_tail_mean(rg_values, tail_percent))
         end
 
         # Aggregate across runs
@@ -250,33 +372,73 @@ end
 
 function process_per_run_normalization(args, tail_percent)
     println("Loading Rg data (grouped by run)...")
-    data_by_run, n_monomers = load_rg_data_by_run(args[:input_dir], args[:pattern])
+    base_states_dir = get(args, :base_states_dir, "")
+    data_by_run, n_monomers = load_rg_data_by_run(args[:input_dir], args[:pattern];
+                                                   base_states_dir=base_states_dir)
     run_ids = sort(collect(keys(data_by_run)))
     println("Loaded data for $(length(run_ids)) runs")
     println()
 
-    # Check that all runs have passive (n_active=0) data
+    # Filter to runs that have passive (n_active=0) data, skip others with warning
+    valid_run_ids = Int[]
+    skipped_runs = Int[]
     for run_id in run_ids
-        if !haskey(data_by_run[run_id], 0)
-            error("Run $run_id is missing n_active=0 (passive) data. Cannot normalize.")
+        if haskey(data_by_run[run_id], 0)
+            push!(valid_run_ids, run_id)
+        else
+            push!(skipped_runs, run_id)
         end
     end
 
-    # Get all n_active values across all runs
+    if !isempty(skipped_runs)
+        println("Warning: Skipping runs without passive (n_active=0) data: $(join(["run$r" for r in skipped_runs], ", "))")
+        println()
+    end
+
+    if isempty(valid_run_ids)
+        error("No runs have n_active=0 (passive) data. Cannot normalize.")
+    end
+
+    # Get all n_active values across valid runs only
     all_n_active = Set{Int}()
-    for (run_id, run_data) in data_by_run
-        union!(all_n_active, keys(run_data))
+    for run_id in valid_run_ids
+        union!(all_n_active, keys(data_by_run[run_id]))
     end
     n_active_values = sort(collect(all_n_active))
 
-    # Compute per-run passive Rg values
+    # Compute per-run passive Rg values (only for valid runs)
     println("Per-run passive Rg values:")
     passive_rg_per_run = Dict{Int, Float64}()
-    for run_id in run_ids
+    invalid_passive_runs = Int[]
+    for run_id in valid_run_ids
         passive_df = data_by_run[run_id][0]
-        passive_rg = compute_tail_mean(passive_df.Rg, tail_percent)
+        rg_values = Vector{Float64}(passive_df.Rg)
+        # Filter out NaN values
+        rg_values = filter(!isnan, rg_values)
+        if isempty(rg_values)
+            @printf("  run%d: Rg_passive = NaN (no valid data, skipping)\n", run_id)
+            push!(invalid_passive_runs, run_id)
+            continue
+        end
+        passive_rg = compute_tail_mean(rg_values, tail_percent)
+        if isnan(passive_rg)
+            @printf("  run%d: Rg_passive = NaN (skipping)\n", run_id)
+            push!(invalid_passive_runs, run_id)
+            continue
+        end
         passive_rg_per_run[run_id] = passive_rg
         @printf("  run%d: Rg_passive = %.4f\n", run_id, passive_rg)
+    end
+
+    # Remove runs with invalid passive Rg
+    valid_run_ids = filter(r -> r ∉ invalid_passive_runs, valid_run_ids)
+
+    if isempty(valid_run_ids)
+        error("No runs have valid passive Rg data. Cannot normalize.")
+    end
+
+    if !isempty(invalid_passive_runs)
+        println("  Skipped $(length(invalid_passive_runs)) runs with invalid passive data")
     end
     println()
 
@@ -285,15 +447,25 @@ function process_per_run_normalization(args, tail_percent)
     n_active_list = Int[]
     mean_rg_norm = Float64[]
     std_rg_norm = Float64[]
+    n_runs_list = Int[]
 
     println("Normalized mean Rg values (per-run normalization, last $(tail_percent)% of data):")
     for n_active in n_active_values
-        # Collect normalized Rg from each run that has this n_active
+        # Collect normalized Rg from each valid run that has this n_active
         norm_values = Float64[]
-        for run_id in run_ids
+        for run_id in valid_run_ids
             if haskey(data_by_run[run_id], n_active)
                 df = data_by_run[run_id][n_active]
-                rg_mean = compute_tail_mean(df.Rg, tail_percent)
+                rg_values = Vector{Float64}(df.Rg)
+                # Filter out NaN values
+                rg_values = filter(!isnan, rg_values)
+                if isempty(rg_values)
+                    continue
+                end
+                rg_mean = compute_tail_mean(rg_values, tail_percent)
+                if isnan(rg_mean)
+                    continue
+                end
                 rg_norm = rg_mean / passive_rg_per_run[run_id]
                 push!(norm_values, rg_norm)
             end
@@ -310,6 +482,7 @@ function process_per_run_normalization(args, tail_percent)
         push!(n_active_list, n_active)
         push!(mean_rg_norm, rg_mean_norm)
         push!(std_rg_norm, rg_std_norm)
+        push!(n_runs_list, n_runs)
 
         if n_runs > 1
             @printf("  n_active=%3d (%d runs): Rg/Rg_passive = %.4f ± %.4f\n",
