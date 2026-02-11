@@ -278,7 +278,8 @@ simid = ""
 # Steps between checkpoints (0 = disabled)
 # Checkpoints allow resuming crashed simulations
 # Recommended: 100000-500000 for long simulations
-interval = 100000
+# NOTE: Disabled by default to avoid Bus errors with parallel simulations
+interval = 0
 
 # Directory for checkpoint files
 # Checkpoints are saved with filenames like:
