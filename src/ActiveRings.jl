@@ -33,6 +33,12 @@ export load_simulation_data, split_rings_coords, split_rings_tangents
 export save_rg_csv, save_msd_csv, save_rs_csv, save_beta_csv
 export analyze_simulation, analyze_ring
 
+# Aggregation exports
+export parse_sweep_filename, extract_run_index
+export detect_time_column, get_value_columns
+export aggregate_timeseries, aggregate_summary
+export group_files_by_params, compute_tail_statistics
+
 # Core structures
 include("parameters.jl")
 include("simulation.jl")
@@ -56,5 +62,6 @@ include(joinpath("systems", "double_ring.jl"))
 include(joinpath("analysis", "metrics.jl"))
 include(joinpath("analysis", "io.jl"))
 include(joinpath("analysis", "analyze.jl"))
+include(joinpath("analysis", "aggregation.jl"))
 
 end
