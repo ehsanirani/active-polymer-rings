@@ -61,6 +61,7 @@ declare -a PARAM_VALUES=()
 # Options
 PARALLEL_JOBS=1
 DRY_RUN=false
+SKIP_EXISTING=false
 PREFIX="run"
 NUM_RUNS=1
 RUN_START=0
@@ -106,6 +107,8 @@ usage_param() {
     echo "  --prefix STR               Prefix for simulation IDs (default: run)"
     echo "  --sweep-id ID              Identifier for this sweep (used in metadata filename)"
     echo "  --dry-run                  Print commands without executing"
+    echo "  --skip-existing            Skip simulations whose output files already exist"
+    echo "                             (checks by simid only - best for resuming same sweep)"
     echo ""
     echo "Base state options:"
     echo "  --base-state TYPE          passive, active, or file path"
@@ -154,6 +157,8 @@ usage_grid() {
     echo "  --prefix STR               Prefix for simulation IDs (default: run)"
     echo "  --sweep-id ID              Identifier for this sweep (used in metadata filename)"
     echo "  --dry-run                  Print commands without executing"
+    echo "  --skip-existing            Skip simulations whose output files already exist"
+    echo "                             (checks by simid only - best for resuming same sweep)"
     echo ""
     echo "Base state options:"
     echo "  --base-state TYPE          passive, active, or file path"
@@ -204,6 +209,10 @@ parse_common_args() {
                 ;;
             --dry-run)
                 DRY_RUN=true
+                shift
+                ;;
+            --skip-existing)
+                SKIP_EXISTING=true
                 shift
                 ;;
             --prefix)
@@ -477,6 +486,7 @@ cmd_param() {
     # Build commands
     declare -a PENDING_COMMANDS=()
     declare -a PENDING_DESCRIPTIONS=()
+    local SKIPPED=0
 
     if [[ "$DRY_RUN" != true ]]; then
         print_header "Running Sweep Simulations"
@@ -487,6 +497,12 @@ cmd_param() {
         # Just replicates
         for run in $(seq "$RUN_START" $((RUN_START + NUM_RUNS - 1))); do
             local simid="${PREFIX}_${run}"
+            # Check if output already exists
+            if [[ "$SKIP_EXISTING" == true ]] && simulation_output_exists "$simid" "$DATA_DIR"; then
+                log_skip "simid=$simid (output exists)"
+                SKIPPED=$((SKIPPED + 1))
+                continue
+            fi
             # Select appropriate base state
             if [[ "$BASE_STATE_PER_RUN" == true && -n "$BASE_STATE_TYPE" ]]; then
                 local run_idx=$((run - RUN_START))
@@ -506,6 +522,13 @@ cmd_param() {
             for run in $(seq "$RUN_START" $((RUN_START + NUM_RUNS - 1))); do
                 local simid
                 simid="$(generate_simid "$run")"
+                local desc="${PARAM_NAMES[0]}=$value, simid=$simid"
+                # Check if output already exists
+                if [[ "$SKIP_EXISTING" == true ]] && simulation_output_exists "$simid" "$DATA_DIR"; then
+                    log_skip "$desc (output exists)"
+                    SKIPPED=$((SKIPPED + 1))
+                    continue
+                fi
                 # Select appropriate base state
                 if [[ "$BASE_STATE_PER_RUN" == true && -n "$BASE_STATE_TYPE" ]]; then
                     local run_idx=$((run - RUN_START))
@@ -513,7 +536,6 @@ cmd_param() {
                 fi
                 local cmd
                 cmd="$(build_simulation_command "$CONFIG_FILE" "$FIXED_OVERRIDES" "$param_args" "$simid" "$base_state_path" "$DATA_DIR")"
-                local desc="${PARAM_NAMES[0]}=$value, simid=$simid"
 
                 PENDING_COMMANDS+=("$cmd")
                 PENDING_DESCRIPTIONS+=("$desc")
@@ -526,7 +548,7 @@ cmd_param() {
 
     # Print summary
     if [[ "$DRY_RUN" != true ]]; then
-        print_summary "$COMPLETED" "$FAILED"
+        print_summary "$COMPLETED" "$FAILED" "$SKIPPED"
     fi
 }
 
@@ -604,6 +626,7 @@ cmd_grid() {
     # Build commands
     declare -a PENDING_COMMANDS=()
     declare -a PENDING_DESCRIPTIONS=()
+    local SKIPPED=0
 
     if [[ "$DRY_RUN" != true ]]; then
         print_header "Running Sweep Simulations"
@@ -623,14 +646,20 @@ cmd_grid() {
         for run in $(seq 0 $((NUM_RUNS - 1))); do
             local simid
             simid="$(generate_simid "$run")"
+            local desc
+            desc="$(build_param_desc "$combo"), simid=$simid"
+            # Check if output already exists
+            if [[ "$SKIP_EXISTING" == true ]] && simulation_output_exists "$simid" "$DATA_DIR"; then
+                log_skip "$desc (output exists)"
+                SKIPPED=$((SKIPPED + 1))
+                continue
+            fi
             # Select appropriate base state
             if [[ "$BASE_STATE_PER_RUN" == true && -n "$BASE_STATE_TYPE" ]]; then
                 base_state_path="${BASE_STATE_PATHS[$run]}"
             fi
             local cmd
             cmd="$(build_simulation_command "$CONFIG_FILE" "$FIXED_OVERRIDES" "$param_args" "$simid" "$base_state_path" "$DATA_DIR")"
-            local desc
-            desc="$(build_param_desc "$combo"), simid=$simid"
 
             PENDING_COMMANDS+=("$cmd")
             PENDING_DESCRIPTIONS+=("$desc")
@@ -642,7 +671,7 @@ cmd_grid() {
 
     # Print summary
     if [[ "$DRY_RUN" != true ]]; then
-        print_summary "$COMPLETED" "$FAILED"
+        print_summary "$COMPLETED" "$FAILED" "$SKIPPED"
     fi
 }
 

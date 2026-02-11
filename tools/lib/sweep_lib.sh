@@ -81,6 +81,7 @@ print_header() {
 print_summary() {
     local completed="$1"
     local failed="$2"
+    local skipped="${3:-0}"
 
     echo ""
     print_header "Summary"
@@ -88,6 +89,44 @@ print_summary() {
     if [[ $failed -gt 0 ]]; then
         echo -e "Failed:    ${RED}$failed${NC}"
     fi
+    if [[ $skipped -gt 0 ]]; then
+        echo -e "Skipped:   ${BLUE}$skipped${NC} (output exists)"
+    fi
+}
+
+# =============================================================================
+# Output existence checking
+# =============================================================================
+
+# Check if simulation output files already exist for a given simid
+# Arguments:
+#   $1 - simid: simulation identifier (e.g., "run0")
+#   $2 - data_dir: base data directory (e.g., "_data")
+# Returns:
+#   0 if output exists, 1 if not
+simulation_output_exists() {
+    local simid="$1"
+    local data_dir="$2"
+
+    # Check JLD2 directory for files with this simid
+    if [[ -d "$data_dir/jld2" ]]; then
+        local jld2_match
+        jld2_match=$(find "$data_dir/jld2" -maxdepth 1 -name "*_${simid}.jld2" 2>/dev/null | head -1)
+        if [[ -n "$jld2_match" ]]; then
+            return 0
+        fi
+    fi
+
+    # Check CSV directory for files with this simid
+    if [[ -d "$data_dir/csv" ]]; then
+        local csv_match
+        csv_match=$(find "$data_dir/csv" -maxdepth 1 -name "*_${simid}_*.csv" 2>/dev/null | head -1)
+        if [[ -n "$csv_match" ]]; then
+            return 0
+        fi
+    fi
+
+    return 1
 }
 
 # =============================================================================
