@@ -274,8 +274,6 @@ ensure_base_state() {
     cmd="$cmd --fact $fact"
     cmd="$cmd --save-state $BASE_STATE_PATH"
     cmd="$cmd --simid $simid"
-    # Export thermal phase to CSV (for passive Rg reference)
-    cmd="$cmd --metrics-format csv"
 
     if [[ "$dry_run" == true ]]; then
         log_dry_run "Creating base state ($base_state_type):"
