@@ -519,39 +519,84 @@ Older sweep scripts are still available for backwards compatibility:
 
 ### Aggregating Results
 
-After running multiple simulations with different `--simid` values, aggregate the metrics to compute mean and standard deviation:
+After running parameter sweeps with multiple replicas, use `aggregate_sweep.jl` to compute statistics across runs.
+
+#### Time-Series Aggregation
+
+Combine replicas at each time point to get mean, std, and sem:
 
 ```bash
-# Aggregate MSD files matching a pattern
-julia --project=. scripts/aggregate.jl \
-    --pattern "_data/csv/single_100_50_0.0_5.0_*_active_msd.csv" \
-    --output "_data/csv/single_100_50_0.0_5.0_aggregated_msd.csv"
+# Aggregate all Rg files from a sweep
+julia --project=. scripts/aggregate_sweep.jl \
+    --pattern "_data/csv/single_N200_Nact*_run*_active_rg.csv" \
+    --mode timeseries \
+    --output-dir _data/aggregated
 
-# Aggregate all metrics for a base name (finds msd, rg files)
-julia --project=. scripts/aggregate.jl \
-    --base "single_100_50_0.0_5.0" \
-    --phase active \
-    --input-dir "_data/csv" \
-    --output-dir "_data/csv/aggregated"
+# Group by parameter value (creates one output file per n_active)
+julia --project=. scripts/aggregate_sweep.jl \
+    --pattern "_data/csv/single_N200_Nact*_run*_active_rg.csv" \
+    --mode timeseries \
+    --group-by n_active \
+    --output-dir _data/aggregated
 ```
 
-**Output format** (aggregated CSV):
+**Time-series output** (`_aggregated.csv`):
 ```csv
-lag_time,msd_monomer_mean,msd_monomer_std,msd_monomer_sem,n_runs
-0.5,0.123,0.015,0.009,3
-1.0,0.456,0.023,0.013,3
+time,Rg_mean,Rg_std,Rg_sem,n_runs
+0.5,8.234,0.312,0.099,10
+1.0,8.156,0.298,0.094,10
 ```
 
-**Aggregation options**:
+#### Steady-State Summary
+
+Extract tail statistics for each file and aggregate across replicas:
+
+```bash
+# Summary table with one row per parameter combination
+julia --project=. scripts/aggregate_sweep.jl \
+    --pattern "_data/csv/single_N200_Nact*_run*_active_rg.csv" \
+    --mode summary \
+    --group-by n_active \
+    --tail-percent 10 \
+    --output _data/aggregated/rg_vs_nactive_summary.csv
+```
+
+**Summary output** (`_summary.csv`):
+```csv
+n_active,n_runs,Rg_mean,Rg_std,Rg_sem
+0,10,8.52,0.31,0.10
+50,10,8.21,0.28,0.09
+100,10,7.84,0.35,0.11
+```
+
+#### Aggregation Options
 
 | Option | Description |
 |--------|-------------|
-| `--pattern` | Glob pattern to match input CSV files |
-| `--base` | Base name to find all metrics (alternative to --pattern) |
-| `--phase` | Phase to aggregate: `active` or `thermal` |
-| `--output` | Output file path (for --pattern mode) |
-| `--output-dir` | Output directory (for --base mode) |
+| `--pattern` | Glob pattern to match files (required, quote to prevent shell expansion) |
+| `--mode` | `timeseries`, `summary`, or `both` (default: `timeseries`) |
+| `--group-by` | Parameter(s) to group by (comma-separated, e.g., `n_active,kangle`) |
+| `--tail-percent` | Percentage of data for tail statistics (default: 20) |
+| `--output` | Output file path (for summary mode without per-group files) |
+| `--output-dir` | Output directory (default: `_data/aggregated`) |
 | `--interpolate` | Interpolate to common time points if times don't match |
+| `--verbose` | Print detailed progress information |
+
+**Note**: Quote the pattern to prevent shell expansion of `*` wildcards:
+```bash
+--pattern "_data/csv/single_N200_Nact*_run*_active_rg.csv"  # correct
+--pattern _data/csv/single_N200_Nact*_run*_active_rg.csv    # may fail
+```
+
+#### Legacy Aggregation Script
+
+The older `aggregate.jl` script is still available for simple aggregation:
+
+```bash
+julia --project=. scripts/aggregate.jl \
+    --pattern "_data/csv/single_100_50_0.0_5.0_*_active_msd.csv" \
+    --output "_data/csv/aggregated_msd.csv"
+```
 
 ## Output Files
 
