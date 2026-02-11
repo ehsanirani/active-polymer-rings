@@ -365,14 +365,10 @@ validate_grid_args() {
 # Generate simid for distinguishing replicates
 # Arguments:
 #   $1 - run_index: replicate index
+# Always includes run index for consistency and resumability
 generate_simid() {
     local run_index="$1"
-
-    if [[ "$NUM_RUNS" -gt 1 ]]; then
-        echo "${PREFIX}${run_index}"
-    else
-        echo "$PREFIX"
-    fi
+    echo "${PREFIX}${run_index}"
 }
 
 # =============================================================================
