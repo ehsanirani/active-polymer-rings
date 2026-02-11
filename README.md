@@ -331,7 +331,7 @@ julia --project=. scripts/simulate.jl --system single \
 
 ## Batch Simulations
 
-The `tools/` folder contains scripts for running parameter sweeps. Both bash and fish versions are available.
+The `tools/sweep.sh` script provides a unified interface for parameter sweeps with base state support.
 
 ### Single Parameter Sweep
 
@@ -339,27 +339,31 @@ Sweep over one parameter while keeping others fixed:
 
 ```bash
 # Sweep active force
-./tools/sweep_parameter.sh config/single_ring.toml \
+./tools/sweep.sh param --config config/single_ring.toml \
     --sweep --fact "1.0 2.0 3.0 4.0 5.0"
 
 # Override some params and sweep another
-./tools/sweep_parameter.sh config/single_ring.toml \
+./tools/sweep.sh param --config config/single_ring.toml \
     --n-monomers 200 --kangle 5.0 \
     --sweep --fact "1.0 2.0 3.0"
 
 # Run 10 replicates with same parameters (for statistics)
-./tools/sweep_parameter.sh config/single_ring.toml --runs 10
+./tools/sweep.sh param --config config/single_ring.toml --runs 10
 
 # Sweep parameter with 5 replicates each (3 values × 5 runs = 15 sims)
-./tools/sweep_parameter.sh config/single_ring.toml \
+./tools/sweep.sh param --config config/single_ring.toml \
     --sweep --fact "1.0 2.0 3.0" --runs 5
 
 # Run 4 simulations in parallel
-./tools/sweep_parameter.sh config/single_ring.toml \
+./tools/sweep.sh param --config config/single_ring.toml \
     --sweep --n-active "10 20 30 40" --parallel 4
 
+# Use range notation (expands to 0 25 50 75 100)
+./tools/sweep.sh param --config config/single_ring.toml \
+    --sweep --n-active "0:25:100"
+
 # Dry run to preview commands
-./tools/sweep_parameter.sh config/single_ring.toml \
+./tools/sweep.sh param --config config/single_ring.toml \
     --sweep --fact "1.0 2.0 3.0" --dry-run
 ```
 
@@ -369,40 +373,104 @@ Sweep over multiple parameters (all combinations):
 
 ```bash
 # Sweep n-active and fact (3x3 = 9 simulations)
-./tools/sweep_grid.sh config/single_ring.toml \
+./tools/sweep.sh grid --config config/single_ring.toml \
     --sweep --n-active "10 30 50" --sweep --fact "1.0 3.0 5.0"
 
 # Override some params and sweep others
-./tools/sweep_grid.sh config/single_ring.toml \
+./tools/sweep.sh grid --config config/single_ring.toml \
     --n-monomers 200 --kangle 5.0 \
     --sweep --n-active "10 30 50" --sweep --fact "1.0 3.0"
 
 # Grid sweep with 5 replicates each (2x3x5 = 30 simulations)
-./tools/sweep_grid.sh config/single_ring.toml \
+./tools/sweep.sh grid --config config/single_ring.toml \
     --sweep --n-active "10 30" --sweep --fact "1.0 2.0 3.0" --runs 5
 
 # With parallel execution
-./tools/sweep_grid.sh config/single_ring.toml \
+./tools/sweep.sh grid --config config/single_ring.toml \
     --sweep --n-active "10 20 30" --sweep --fact "1.0 2.0" --parallel 4
 ```
+
+### Base State Support
+
+Base states allow you to pre-equilibrate a polymer configuration and reuse it across multiple simulations. This is useful when you want all runs to start from the same equilibrated state, saving thermalization time.
+
+```bash
+# Create and use a passive (n-active=0) base state
+# All simulations will load from the same equilibrated configuration
+./tools/sweep.sh param --config config/single_ring.toml \
+    --base-state passive --n-monomers 200 \
+    --sweep --n-active "0 50 100 150 200" --runs 5
+
+# Use an active base state (fully active equilibration)
+./tools/sweep.sh param --config config/single_ring.toml \
+    --base-state active --n-monomers 200 \
+    --sweep --n-active "50 100 150" --runs 3
+```
+
+Base states are automatically created if they don't exist and cached in `_data/base_states/`:
+- `passive_N200_thermal2M.jld2` — passive equilibration with 2M thermal steps
+- `active_N200_thermal2M.jld2` — active equilibration with 2M thermal steps
+
+### Per-Run Base States
+
+For statistical independence, you may want each replica to start from a different equilibrated configuration. The `--base-state-per-run` option creates separate base states for each run index:
+
+```bash
+# Each replica gets its own independent equilibrated state
+./tools/sweep.sh param --config config/single_ring.toml \
+    --base-state passive --base-state-per-run --n-monomers 200 \
+    --sweep --n-active "0 50 100" --runs 3
+```
+
+This creates:
+- `passive_N200_thermal2M_run0.jld2` — used by all run0 simulations (n-active=0, 50, 100)
+- `passive_N200_thermal2M_run1.jld2` — used by all run1 simulations
+- `passive_N200_thermal2M_run2.jld2` — used by all run2 simulations
+
+**When to use per-run base states:**
+- When you need statistically independent replicas
+- When studying ensemble properties that shouldn't share initial conditions
+- When running multiple independent trajectories for error estimation
+
+**When to use shared base state (default):**
+- When comparing different parameter values from the same starting point
+- When initial configuration shouldn't vary between runs
+- When you want faster setup (only one equilibration needed)
 
 ### Sweep Script Options
 
 | Option | Description |
 |--------|-------------|
-| `--sweep --param "values"` | Parameter to sweep (space-separated values) |
+| `--config FILE` | Config file (optional) |
+| `--data-dir DIR` | Base data directory (default: _data) |
+| `--sweep --param "values"` | Parameter to sweep (space-separated or range notation) |
 | `--param value` | Fixed override (applied to all runs) |
 | `--runs N` | Number of replicates per parameter combination (default: 1) |
+| `--run-start N` | Starting run index (default: 0) |
 | `--parallel N` | Run N simulations in parallel |
 | `--dry-run` | Preview commands without executing |
 | `--prefix STR` | Prefix for simulation IDs (default: run) |
 
-### Fish Shell
+**Base state options:**
 
-Fish versions are also available:
+| Option | Description |
+|--------|-------------|
+| `--base-state TYPE` | Base state type: `passive`, `active`, or file path |
+| `--base-state-per-run` | Create separate base state for each replica |
+| `--n-monomers N` | Number of monomers (required with passive/active) |
+| `--thermal-steps N` | Thermal steps for base state creation (default: 2000000) |
+| `--fact F` | Active force for base state creation (default: 5.0) |
+
+**Range notation:**
+- `"0:25:100"` expands to `"0 25 50 75 100"`
+- `"1.0:0.5:3.0"` expands to `"1.0 1.5 2.0 2.5 3.0"`
+
+### Legacy Scripts
+
+Older sweep scripts are still available for backwards compatibility:
 ```bash
-./tools/sweep_parameter.fish config/single_ring.toml --sweep --fact "1.0 2.0 3.0"
-./tools/sweep_grid.fish config/single_ring.toml --sweep --n-active "10 30" --sweep --fact "1.0 3.0"
+./tools/sweep_parameter.sh config/single_ring.toml --sweep --fact "1.0 2.0 3.0"
+./tools/sweep_grid.sh config/single_ring.toml --sweep --n-active "10 30" --sweep --fact "1.0 3.0"
 ```
 
 ### Aggregating Results
