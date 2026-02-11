@@ -509,14 +509,6 @@ This creates:
 - `"0:25:100"` expands to `"0 25 50 75 100"`
 - `"1.0:0.5:3.0"` expands to `"1.0 1.5 2.0 2.5 3.0"`
 
-### Legacy Scripts
-
-Older sweep scripts are still available for backwards compatibility:
-```bash
-./tools/sweep_parameter.sh config/single_ring.toml --sweep --fact "1.0 2.0 3.0"
-./tools/sweep_grid.sh config/single_ring.toml --sweep --n-active "10 30" --sweep --fact "1.0 3.0"
-```
-
 ### Aggregating Results
 
 After running parameter sweeps with multiple replicas, use `aggregate_sweep.jl` to compute statistics across runs.
