@@ -61,7 +61,7 @@ declare -a PARAM_VALUES=()
 # Options
 PARALLEL_JOBS=1
 DRY_RUN=false
-SKIP_EXISTING=false
+SKIP_EXISTING=true
 PREFIX="run"
 NUM_RUNS=1
 RUN_START=0
@@ -107,8 +107,8 @@ usage_param() {
     echo "  --prefix STR               Prefix for simulation IDs (default: run)"
     echo "  --sweep-id ID              Identifier for this sweep (used in metadata filename)"
     echo "  --dry-run                  Print commands without executing"
-    echo "  --skip-existing            Skip simulations whose output files already exist"
-    echo "                             (checks by simid only - best for resuming same sweep)"
+    echo "  --force                    Re-run simulations even if output files exist"
+    echo "                             (by default, existing simulations are skipped)"
     echo ""
     echo "Base state options:"
     echo "  --base-state TYPE          passive, active, or file path"
@@ -157,8 +157,8 @@ usage_grid() {
     echo "  --prefix STR               Prefix for simulation IDs (default: run)"
     echo "  --sweep-id ID              Identifier for this sweep (used in metadata filename)"
     echo "  --dry-run                  Print commands without executing"
-    echo "  --skip-existing            Skip simulations whose output files already exist"
-    echo "                             (checks by simid only - best for resuming same sweep)"
+    echo "  --force                    Re-run simulations even if output files exist"
+    echo "                             (by default, existing simulations are skipped)"
     echo ""
     echo "Base state options:"
     echo "  --base-state TYPE          passive, active, or file path"
@@ -211,8 +211,8 @@ parse_common_args() {
                 DRY_RUN=true
                 shift
                 ;;
-            --skip-existing)
-                SKIP_EXISTING=true
+            --force)
+                SKIP_EXISTING=false
                 shift
                 ;;
             --prefix)
