@@ -153,11 +153,11 @@ metric_npoints = 1000
 # Enable center-of-mass MSD computation
 # By default, only monomer MSD is computed
 # Set to true to also compute COM MSD for each ring separately
-msd_com = false
+msd_com = true
 
 # Enable MSD in center-of-mass reference frame
 # Measures internal monomer fluctuations, removing overall polymer drift
-msd_com_frame = false
+msd_com_frame = true
 
 # Enable time-averaged MSD computation in post-processing
 # By default, only non-time-averaged (single t0) MSD from simulation logger is used
@@ -175,7 +175,7 @@ msd_time_averaged = false
 
 # Logging mode for Rg: "fixed" or "logspaced"
 # Fixed intervals are often preferred for Rg to enable autocorrelation analysis
-# mode = "fixed"
+mode = "fixed"
 
 # Fixed interval for Rg logging (only used when mode = "fixed")
 # interval = 100
@@ -277,8 +277,8 @@ simid = ""
 [checkpoint]
 # Steps between checkpoints (0 = disabled)
 # Checkpoints allow resuming crashed simulations
-# Example: 100000 saves state every 100k steps
-interval = 0
+# Recommended: 100000-500000 for long simulations
+interval = 100000
 
 # Directory for checkpoint files
 # Checkpoints are saved with filenames like:
