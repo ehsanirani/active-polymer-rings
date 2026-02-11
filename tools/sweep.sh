@@ -64,6 +64,7 @@ DRY_RUN=false
 PREFIX="run"
 NUM_RUNS=1
 RUN_START=0
+SWEEP_ID=""
 
 # Base state options
 BASE_STATE_TYPE=""
@@ -103,6 +104,7 @@ usage_param() {
     echo "  --run-start N              Starting run index (default: 0)"
     echo "  --parallel N               Run N simulations in parallel (default: 1)"
     echo "  --prefix STR               Prefix for simulation IDs (default: run)"
+    echo "  --sweep-id ID              Identifier for this sweep (used in metadata filename)"
     echo "  --dry-run                  Print commands without executing"
     echo ""
     echo "Base state options:"
@@ -150,6 +152,7 @@ usage_grid() {
     echo "  --runs N                   Number of replicates per combination (default: 1)"
     echo "  --parallel N               Run N simulations in parallel (default: 1)"
     echo "  --prefix STR               Prefix for simulation IDs (default: run)"
+    echo "  --sweep-id ID              Identifier for this sweep (used in metadata filename)"
     echo "  --dry-run                  Print commands without executing"
     echo ""
     echo "Base state options:"
@@ -213,6 +216,10 @@ parse_common_args() {
                 ;;
             --run-start)
                 RUN_START="$2"
+                shift 2
+                ;;
+            --sweep-id)
+                SWEEP_ID="$2"
                 shift 2
                 ;;
             --base-state)
@@ -446,6 +453,11 @@ cmd_param() {
         echo ""
     fi
 
+    # Save sweep metadata
+    save_sweep_metadata "$DATA_DIR" "$SWEEP_ID" "param" "$CONFIG_FILE" "$FIXED_OVERRIDES" \
+        "$DRY_RUN" "$N_MONOMERS" "$BASE_STATE_TYPE" "$BASE_STATE_PER_RUN" "$THERMAL_STEPS" \
+        "$FACT" "$NUM_RUNS" "$RUN_START" "$PREFIX" "$PARALLEL_JOBS" "$total"
+
     # Handle base state if specified
     local base_state_path=""
     if [[ -n "$BASE_STATE_TYPE" ]]; then
@@ -567,6 +579,11 @@ cmd_grid() {
         echo -e "${YELLOW}Dry run mode - commands will be printed but not executed${NC}"
         echo ""
     fi
+
+    # Save sweep metadata
+    save_sweep_metadata "$DATA_DIR" "$SWEEP_ID" "grid" "$CONFIG_FILE" "$FIXED_OVERRIDES" \
+        "$DRY_RUN" "$N_MONOMERS" "$BASE_STATE_TYPE" "$BASE_STATE_PER_RUN" "$THERMAL_STEPS" \
+        "$FACT" "$NUM_RUNS" 0 "$PREFIX" "$PARALLEL_JOBS" "$total"
 
     # Handle base state if specified
     local base_state_path=""

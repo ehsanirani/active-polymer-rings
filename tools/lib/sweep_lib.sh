@@ -473,3 +473,143 @@ run_parallel() {
         fi
     done
 }
+
+# =============================================================================
+# Metadata saving
+# =============================================================================
+
+# Save sweep metadata to a file for later reference
+# Arguments:
+#   $1 - data_dir: base data directory
+#   $2 - sweep_id: identifier for this sweep (used in filename)
+#   $3 - subcommand: param or grid
+#   $4 - config_file
+#   $5 - fixed_overrides
+#   $6 - dry_run: true/false
+# Uses global arrays: PARAM_NAMES, PARAM_VALUES
+# Uses global variables for base state and run settings
+save_sweep_metadata() {
+    local data_dir="$1"
+    local sweep_id="$2"
+    local subcommand="$3"
+    local config_file="$4"
+    local fixed_overrides="$5"
+    local dry_run="$6"
+    local n_monomers="${7:-}"
+    local base_state_type="${8:-}"
+    local base_state_per_run="${9:-false}"
+    local thermal_steps="${10:-2000000}"
+    local fact="${11:-5.0}"
+    local num_runs="${12:-1}"
+    local run_start="${13:-0}"
+    local prefix="${14:-run}"
+    local parallel_jobs="${15:-1}"
+    local total_sims="${16:-0}"
+
+    # Create metadata directory
+    local metadata_dir="${data_dir}/metadata"
+    if [[ "$dry_run" == true ]]; then
+        log_dry_run "mkdir -p $metadata_dir"
+    else
+        mkdir -p "$metadata_dir"
+    fi
+
+    # Generate filename
+    local timestamp
+    timestamp="$(date +%Y%m%d_%H%M%S)"
+    local filename
+    if [[ -n "$sweep_id" ]]; then
+        filename="sweep_${sweep_id}_${timestamp}.txt"
+    else
+        filename="sweep_${timestamp}.txt"
+    fi
+    local metadata_file="${metadata_dir}/${filename}"
+
+    if [[ "$dry_run" == true ]]; then
+        log_dry_run "Would save metadata to: $metadata_file"
+        return 0
+    fi
+
+    # Write metadata
+    {
+        echo "# Sweep Metadata"
+        echo "# Generated: $(date -Iseconds)"
+        echo ""
+        echo "[sweep]"
+        echo "timestamp = \"$(date -Iseconds)\""
+        echo "subcommand = \"$subcommand\""
+        if [[ -n "$sweep_id" ]]; then
+            echo "sweep_id = \"$sweep_id\""
+        fi
+        echo "total_simulations = $total_sims"
+        echo ""
+
+        echo "[paths]"
+        echo "data_dir = \"$data_dir\""
+        if [[ -n "$config_file" ]]; then
+            echo "config_file = \"$config_file\""
+        fi
+        echo ""
+
+        echo "[runs]"
+        echo "num_runs = $num_runs"
+        echo "run_start = $run_start"
+        echo "prefix = \"$prefix\""
+        echo "parallel_jobs = $parallel_jobs"
+        echo ""
+
+        if [[ -n "$base_state_type" ]]; then
+            echo "[base_state]"
+            echo "type = \"$base_state_type\""
+            echo "per_run = $base_state_per_run"
+            if [[ -n "$n_monomers" ]]; then
+                echo "n_monomers = $n_monomers"
+            fi
+            echo "thermal_steps = $thermal_steps"
+            echo "fact = $fact"
+            echo ""
+        fi
+
+        if [[ -n "$fixed_overrides" ]]; then
+            echo "[fixed_overrides]"
+            echo "# Command line: $fixed_overrides"
+            # Parse overrides into key-value pairs
+            local override_args=($fixed_overrides)
+            local i=0
+            while [[ $i -lt ${#override_args[@]} ]]; do
+                local key="${override_args[$i]}"
+                local val="${override_args[$((i+1))]}"
+                # Remove leading dashes and convert to underscore
+                key="${key#--}"
+                key="${key//-/_}"
+                echo "$key = \"$val\""
+                i=$((i + 2))
+            done
+            echo ""
+        fi
+
+        echo "[sweep_parameters]"
+        if [[ ${#PARAM_NAMES[@]} -gt 0 ]]; then
+            for idx in "${!PARAM_NAMES[@]}"; do
+                local param_name="${PARAM_NAMES[$idx]}"
+                local param_values="${PARAM_VALUES[$idx]}"
+                local expanded_values
+                expanded_values="$(expand_values "$param_values")"
+                # Remove leading dashes
+                param_name="${param_name#--}"
+                param_name="${param_name//-/_}"
+                echo "${param_name}_raw = \"$param_values\""
+                echo "${param_name}_expanded = \"$expanded_values\""
+            done
+        else
+            echo "# No sweep parameters (replicates only)"
+        fi
+        echo ""
+
+        echo "[command]"
+        echo "# Original command line arguments can be reconstructed from above"
+
+    } > "$metadata_file"
+
+    log_info "Metadata saved to: $metadata_file"
+}
