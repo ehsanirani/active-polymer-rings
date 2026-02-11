@@ -47,7 +47,7 @@ fact = 1.0
 #   0.0  : Fully flexible chain
 #   > 0  : Semi-flexible chain (higher = stiffer)
 # Typical range: 0.0 - 10.0
-kangle = 0.0
+kangle = 1.0
 
 # Bond spring constant for FENE bonds connecting monomers (energy units)
 # Controls bond stiffness in the finitely extensible nonlinear elastic potential
@@ -75,7 +75,7 @@ gamma = 2.0
 # Uses Velocity Verlet algorithm
 # Must be small enough for numerical stability (typically dt < 0.1)
 # If simulation crashes or shows instabilities, decrease this value
-dt = 0.001
+dt = 0.01
 
 # Integration timestep for thermalization phase (time units)
 # Set to 0 to use the same value as dt
@@ -131,6 +131,10 @@ metric_npoints = 1000
 # By default, only monomer MSD is computed
 # Set to true to also compute COM MSD
 msd_com = false
+
+# Enable MSD in center-of-mass reference frame
+# Measures internal monomer fluctuations, removing overall polymer drift
+msd_com_frame = false
 
 # Enable time-averaged MSD computation in post-processing
 # By default, only non-time-averaged (single t0) MSD from simulation logger is used
