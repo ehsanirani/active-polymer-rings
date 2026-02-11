@@ -600,6 +600,85 @@ rg = data["active/loggers"]["rg"].Rg_total
 # Your custom analysis here
 ```
 
+### Equilibration Check
+
+The `check_equilibration.jl` script verifies that a simulation has reached steady state using autocorrelation analysis of the radius of gyration (Rg).
+
+**Analyze an existing simulation:**
+```bash
+julia --project=. scripts/check_equilibration.jl _data/jld2/simulation.jld2 --save-acf
+```
+
+**Run a new simulation and analyze:**
+```bash
+julia --project=. scripts/check_equilibration.jl \
+    --config config/single_ring.toml \
+    --n-monomers 200 \
+    --n-steps 2000000 \
+    --save-acf
+```
+
+**Run only thermal phase (passive polymer):**
+```bash
+julia --project=. scripts/check_equilibration.jl \
+    --config config/single_ring.toml \
+    --n-monomers 200 \
+    --n-steps 0 \
+    --thermal-steps 2000000 \
+    --save-state _data/base_states/passive_N200.jld2 \
+    --save-acf
+```
+
+**Run active phase from a base state:**
+```bash
+julia --project=. scripts/check_equilibration.jl \
+    --config config/single_ring.toml \
+    --load-state _data/base_states/passive_N200.jld2 \
+    --n-active 50 --fact 5.0 \
+    --n-steps 2000000 \
+    --save-acf
+```
+
+**Output interpretation:**
+```
+Correlation Time Estimates (τ_corr):
+  -------------------------------------------------------
+  Method          | Lag [samples] |    τ [steps]
+  -------------------------------------------------------
+  First zero      |          45.0 |       45000.0
+  e-folding (1/e) |          32.0 |       32000.0
+  Integrated      |          38.5 |       38500.0
+  -------------------------------------------------------
+
+Equilibration Assessment:
+  Total steps: 2000000
+  Correlation time (τ_integrated): 38500 steps
+  Number of correlation times: 51.9 (= total_steps / τ)
+  Effective independent samples: 26.0
+  Status: WELL EQUILIBRATED (>= 20 τ_corr)
+```
+
+- **τ [steps]**: Correlation time in the same units as `--n-steps`
+- **Number of correlation times**: Should be ≥10 for equilibration, ≥20 for well-equilibrated
+- **Effective independent samples**: Actual number of statistically independent measurements
+
+**CSV output** (with `--save-acf`):
+- `acf_<basename>_acf.csv` — ACF values vs lag
+- `acf_<basename>_summary.csv` — Correlation times and metrics
+- `acf_<basename>_rg.csv` — Rg time series
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--config FILE` | Config file to run simulation |
+| `--phase PHASE` | Phase to analyze: `active` or `thermal` (auto-detected) |
+| `--save-acf` | Save ACF data to CSV files |
+| `--output BASE` | Output filename base (default: `acf_<input>`) |
+| `--max-lag N` | Maximum lag for ACF (default: n/2) |
+| `--quiet` | Suppress detailed output |
+
+All simulation parameters from `simulate.jl` are supported (e.g., `--n-monomers`, `--n-active`, `--fact`, `--kangle`, etc.).
+
 ## Citation
 
 If you use this code in your research, please cite:

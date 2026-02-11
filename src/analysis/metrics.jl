@@ -5,6 +5,7 @@ using Random
 
 export gyration_tensor_eigenvalues, compute_rg_timeseries
 export compute_msd, compute_msd_com_timeaveraged, compute_msd_com_frame, compute_rs, compute_beta
+export compute_autocorrelation, estimate_correlation_time
 
 """
     gyration_tensor_eigenvalues(positions::Vector{SVector{3, Float64}})
@@ -248,4 +249,72 @@ function compute_beta(tangents_history::Vector{Vector{SVector{3, Float64}}})
     end
 
     return correlations
+end
+
+"""
+    compute_autocorrelation(signal::Vector{Float64}, max_lag::Int=0) -> Vector{Float64}
+
+Compute normalized autocorrelation function of a time series.
+
+Returns ACF[τ] for τ = 0, 1, ..., max_lag where ACF[0] = 1.0 by definition.
+
+# Arguments
+- `signal`: Time series data
+- `max_lag`: Maximum lag to compute (default: n ÷ 2)
+
+# Returns
+- Vector of ACF values from lag 0 to max_lag
+"""
+function compute_autocorrelation(signal::Vector{Float64}, max_lag::Int=0)
+    n = length(signal)
+    max_lag = max_lag > 0 ? min(max_lag, n-1) : n ÷ 2
+
+    # Subtract mean
+    μ = mean(signal)
+    x = signal .- μ
+
+    # Variance (for normalization)
+    var_x = dot(x, x) / n
+
+    acf = Vector{Float64}(undef, max_lag + 1)
+    for τ in 0:max_lag
+        # ACF(τ) = (1/N) Σ_t x(t) * x(t+τ)
+        acf[τ+1] = dot(x[1:n-τ], x[τ+1:n]) / ((n - τ) * var_x)
+    end
+
+    return acf
+end
+
+"""
+    estimate_correlation_time(acf::Vector{Float64}; method::Symbol=:integrated) -> Float64
+
+Estimate correlation time from an autocorrelation function.
+
+# Methods
+- `:first_zero` - lag where ACF first crosses zero
+- `:e_folding` - lag where ACF ≈ 1/e ≈ 0.368
+- `:integrated` - ∫ ACF(τ) dτ from 0 to first zero (most robust, default)
+
+# Arguments
+- `acf`: Autocorrelation function values (from compute_autocorrelation)
+- `method`: Method for estimating correlation time
+
+# Returns
+- Estimated correlation time in units of lag indices
+"""
+function estimate_correlation_time(acf::Vector{Float64}; method::Symbol=:integrated)
+    if method == :first_zero
+        idx = findfirst(x -> x <= 0, acf)
+        return idx === nothing ? Float64(length(acf) - 1) : Float64(idx - 1)
+    elseif method == :e_folding
+        idx = findfirst(x -> x <= 1/ℯ, acf)
+        return idx === nothing ? Float64(length(acf) - 1) : Float64(idx - 1)
+    elseif method == :integrated
+        # Integrated autocorrelation time (more robust)
+        idx = findfirst(x -> x <= 0, acf)
+        cutoff = idx === nothing ? length(acf) : idx
+        return sum(acf[1:cutoff])
+    else
+        error("Unknown method: $method. Use :first_zero, :e_folding, or :integrated")
+    end
 end
