@@ -13,7 +13,7 @@ function parse_commandline()
 
     @add_arg_table s begin
         "input"
-            help = "JLD2 file to analyze (or use --config to run simulation first)"
+            help = "File to analyze: JLD2 or CSV (e.g., *_active_rg.csv). Use --config to run simulation first."
             arg_type = String
             default = ""
 
@@ -342,6 +342,51 @@ function save_acf_csv(result, output_base::String; rg_values::Union{Vector{Float
 end
 
 """
+    load_rg_from_csv(csv_file)
+
+Load Rg time series from a CSV file (e.g., *_active_rg.csv).
+
+Returns: (rg_values, dt_sample, total_time, is_uniform)
+where dt_sample is the time between samples (from the time column).
+is_uniform indicates whether sampling is approximately uniform.
+"""
+function load_rg_from_csv(csv_file::String)
+    df = CSV.read(csv_file, DataFrame)
+
+    if !hasproperty(df, :Rg)
+        error("CSV file missing 'Rg' column. Available columns: $(names(df))")
+    end
+    if !hasproperty(df, :time)
+        error("CSV file missing 'time' column. Available columns: $(names(df))")
+    end
+
+    rg_values = Vector{Float64}(df.Rg)
+    times = Vector{Float64}(df.time)
+
+    total_time = times[end] - times[1]
+
+    # Check if sampling is uniform
+    is_uniform = true
+    if length(times) > 2
+        dt_first = times[2] - times[1]
+        dt_last = times[end] - times[end-1]
+        # If first and last intervals differ by more than 10%, it's non-uniform
+        if dt_last > 1.1 * dt_first || dt_last < 0.9 * dt_first
+            is_uniform = false
+        end
+    end
+
+    # Compute average time interval
+    if length(times) > 1
+        dt_sample = total_time / (length(times) - 1)
+    else
+        dt_sample = times[1]
+    end
+
+    return rg_values, dt_sample, total_time, is_uniform
+end
+
+"""
     load_rg_from_jld2(jld2_file, phase)
 
 Load Rg time series, dt_sim, and metric_interval from a JLD2 file.
@@ -511,23 +556,50 @@ function main()
     end
 
     # Determine input file
-    jld2_file = args[:input]
+    input_file = args[:input]
 
-    if isempty(jld2_file)
+    if isempty(input_file)
         # No input file - need to run simulation
         if isempty(args[:config])
-            error("Either provide an input JLD2 file or --config to run a simulation")
+            error("Either provide an input file (JLD2 or CSV) or --config to run a simulation")
         end
-        jld2_file = run_simulation_and_analyze(args[:config], args)
+        input_file = run_simulation_and_analyze(args[:config], args)
     end
 
     if verbose
-        println("File: $jld2_file")
+        println("File: $input_file")
         println("Phase: $phase")
     end
 
-    # Load Rg data
-    rg_values, dt_sim, metric_interval, params = load_rg_from_jld2(jld2_file, phase)
+    # Load Rg data - detect file type
+    is_csv = endswith(lowercase(input_file), ".csv")
+
+    if is_csv
+        # CSV file - load directly, report in time units
+        rg_values, dt_sample, total_time, is_uniform = load_rg_from_csv(input_file)
+        # For CSV, we use dt_sample as the unit and metric_interval=1
+        dt_sim = dt_sample
+        metric_interval = 1
+        if verbose
+            println("Loaded from CSV")
+            println("  Samples: $(length(rg_values))")
+            println("  Total time: $total_time time units")
+            println("  Avg sample interval: $(@sprintf("%.4f", dt_sample)) time units")
+            if !is_uniform
+                println()
+                println("  ⚠ WARNING: Non-uniform sampling detected (likely logspaced)!")
+                println("    ACF analysis assumes uniform sampling.")
+                println("    Results may not be accurate.")
+                println("    Consider re-running with --metric-mode fixed")
+                println()
+            end
+        end
+    elseif endswith(lowercase(input_file), ".jld2")
+        # JLD2 file - need phase
+        rg_values, dt_sim, metric_interval, params = load_rg_from_jld2(input_file, phase)
+    else
+        error("Unknown file type. Provide a .jld2 or .csv file (e.g., *_active_rg.csv)")
+    end
 
     # Analyze equilibration
     result = analyze_equilibration(rg_values, dt_sim, metric_interval;
@@ -538,7 +610,7 @@ function main()
     if args[:save_acf]
         output_base = args[:output]
         if isempty(output_base)
-            base_name = splitext(basename(jld2_file))[1]
+            base_name = splitext(basename(input_file))[1]
             output_base = "acf_$(base_name)"
         end
         save_acf_csv(result, output_base; rg_values=rg_values)

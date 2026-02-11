@@ -22,8 +22,8 @@ function create_single_ring_hard_system(params::Parameters, sim_bodies::SimBodie
         collect(1:n_monomers),
         push!(collect(2:n_monomers), 1),
         push!(collect(3:n_monomers), 1, 2),
-        repeat(["cangle"], n_particles),
-        [CosineAngle(; k=params.kangle, θ0=0) for _ in 1:n_particles]
+        [CosineAngle(; k=params.kangle, θ0=0) for _ in 1:n_particles],
+        repeat(["cangle"], n_particles)
     )
     
     pair_inters = (LennardJones(
@@ -32,15 +32,22 @@ function create_single_ring_hard_system(params::Parameters, sim_bodies::SimBodie
     ),)
     
     specific_inters = (polymer_bonds, polymer_angles)
-    
+
+    # Include ActiveTangentForce for activity (k=0 since bending handled by CosineAngle)
     general_inters = (
+        ActiveTangentForce(
+            system_type=:single,
+            n_monomers_1=n_monomers,
+            k=0.0,  # Bending already handled by CosineAngle
+            f_active=params.factive
+        ),
         LangevinThermostat(
             KT=params.KT, γ=params.γ, δt=params.dt,
             frand=zero(sim_bodies.coords),
             fdamp=zero(sim_bodies.coords)
         ),
     )
-    
+
     return Molly.System(
         atoms=sim_bodies.atoms,
         coords=sim_bodies.coords,
