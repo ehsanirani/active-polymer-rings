@@ -102,31 +102,75 @@ print_summary() {
 # Arguments:
 #   $1 - simid: simulation identifier (e.g., "run0")
 #   $2 - data_dir: base data directory (e.g., "_data")
+#   $3 - pattern_prefix: optional pattern to match specific parameters (e.g., "*_Nact175_*")
+#                        defaults to "*" to match any file with the simid
 # Returns:
 #   0 if output exists, 1 if not
 simulation_output_exists() {
     local simid="$1"
     local data_dir="$2"
+    local pattern_prefix="${3:-*}"
 
     # Check JLD2 directory for files with this simid
+    # Exclude base_state files which also contain run indices in their names
+    # Use "command find" to bypass shell aliases (e.g., fd)
     if [[ -d "$data_dir/jld2" ]]; then
         local jld2_match
-        jld2_match=$(find "$data_dir/jld2" -maxdepth 1 -name "*_${simid}.jld2" 2>/dev/null | head -1)
+        jld2_match=$(command find "$data_dir/jld2" -maxdepth 1 -name "${pattern_prefix}_${simid}.jld2" \
+            ! -name "*base_state*" 2>/dev/null | head -1)
         if [[ -n "$jld2_match" ]]; then
             return 0
         fi
     fi
 
     # Check CSV directory for files with this simid
+    # Exclude base_state files which also contain run indices in their names
+    # Use "command find" to bypass shell aliases (e.g., fd)
     if [[ -d "$data_dir/csv" ]]; then
         local csv_match
-        csv_match=$(find "$data_dir/csv" -maxdepth 1 -name "*_${simid}_*.csv" 2>/dev/null | head -1)
+        csv_match=$(command find "$data_dir/csv" -maxdepth 1 -name "${pattern_prefix}_${simid}_*.csv" \
+            ! -name "*base_state*" 2>/dev/null | head -1)
         if [[ -n "$csv_match" ]]; then
             return 0
         fi
     fi
 
     return 1
+}
+
+# Convert CLI parameter name and value to filename pattern fragment
+# Used for matching specific parameter combinations in simulation output files
+# Arguments:
+#   $1 - param_name: CLI parameter name (e.g., "--n-active", "--fact")
+#   $2 - param_value: parameter value (e.g., "175", "5.0")
+# Output:
+#   Filename pattern fragment (e.g., "*_Nact175_*", "*_fact5.0_*")
+param_to_filename_pattern() {
+    local param_name="$1"
+    local param_value="$2"
+
+    # Remove leading dashes
+    param_name="${param_name#--}"
+
+    # Map CLI parameter names to filename format
+    case "$param_name" in
+        n-active)
+            echo "*_Nact${param_value}_*"
+            ;;
+        n-monomers)
+            echo "*_N${param_value}_*"
+            ;;
+        fact)
+            echo "*_fact${param_value}_*"
+            ;;
+        kangle)
+            echo "*_kang${param_value}_*"
+            ;;
+        *)
+            # Generic fallback: use parameter name as-is
+            echo "*_${param_name}${param_value}_*"
+            ;;
+    esac
 }
 
 # =============================================================================

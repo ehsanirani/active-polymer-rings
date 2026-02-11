@@ -518,13 +518,16 @@ cmd_param() {
         for i in "${!VALUES_ARRAY[@]}"; do
             local value="${VALUES_ARRAY[$i]}"
             local param_args="${PARAM_NAMES[0]} $value"
+            # Build pattern prefix to match this specific parameter value
+            local pattern_prefix
+            pattern_prefix="$(param_to_filename_pattern "${PARAM_NAMES[0]}" "$value")"
 
             for run in $(seq "$RUN_START" $((RUN_START + NUM_RUNS - 1))); do
                 local simid
                 simid="$(generate_simid "$run")"
                 local desc="${PARAM_NAMES[0]}=$value, simid=$simid"
-                # Check if output already exists
-                if [[ "$SKIP_EXISTING" == true ]] && simulation_output_exists "$simid" "$DATA_DIR"; then
+                # Check if output already exists for this specific parameter combination
+                if [[ "$SKIP_EXISTING" == true ]] && simulation_output_exists "$simid" "$DATA_DIR" "$pattern_prefix"; then
                     log_skip "$desc (output exists)"
                     SKIPPED=$((SKIPPED + 1))
                     continue
@@ -637,10 +640,18 @@ cmd_grid() {
         local combo="${COMBINATIONS[$i]}"
         IFS=',' read -ra values <<< "$combo"
 
-        # Build parameter args
+        # Build parameter args and combined pattern prefix for all parameters
         local param_args=""
+        local pattern_prefix="*"
         for idx in "${!PARAM_NAMES[@]}"; do
             param_args="$param_args ${PARAM_NAMES[$idx]} ${values[$idx]}"
+            # Add each parameter to the pattern (intersection of all patterns)
+            local single_pattern
+            single_pattern="$(param_to_filename_pattern "${PARAM_NAMES[$idx]}" "${values[$idx]}")"
+            # Extract the middle part (e.g., "_Nact175_" from "*_Nact175_*")
+            local pattern_part="${single_pattern#\*}"
+            pattern_part="${pattern_part%\*}"
+            pattern_prefix="${pattern_prefix}${pattern_part}*"
         done
 
         for run in $(seq 0 $((NUM_RUNS - 1))); do
@@ -648,8 +659,8 @@ cmd_grid() {
             simid="$(generate_simid "$run")"
             local desc
             desc="$(build_param_desc "$combo"), simid=$simid"
-            # Check if output already exists
-            if [[ "$SKIP_EXISTING" == true ]] && simulation_output_exists "$simid" "$DATA_DIR"; then
+            # Check if output already exists for this specific parameter combination
+            if [[ "$SKIP_EXISTING" == true ]] && simulation_output_exists "$simid" "$DATA_DIR" "$pattern_prefix"; then
                 log_skip "$desc (output exists)"
                 SKIPPED=$((SKIPPED + 1))
                 continue
