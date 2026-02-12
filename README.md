@@ -495,6 +495,10 @@ This creates:
 | `--dry-run` | Preview commands without executing |
 | `--prefix STR` | Prefix for simulation IDs (default: run) |
 
+Any `simulate.jl` option can be passed through to individual simulations (e.g., `--metrics-format csv`, `--kangle 5.0`).
+
+**Tip**: Use `--metrics-format csv` when you plan to aggregate results later (see [Aggregating Results](#aggregating-results)).
+
 **Base state options:**
 
 | Option | Description |
@@ -512,6 +516,19 @@ This creates:
 ### Aggregating Results
 
 After running parameter sweeps with multiple replicas, use `aggregate_sweep.jl` to compute statistics across runs.
+
+**Important**: Aggregation works on CSV metric files. Make sure to use `--metrics-format csv` when running sweeps:
+
+```bash
+# Run sweep with CSV output (required for aggregation)
+./tools/sweep.sh param --config config/single_ring.toml \
+    --metrics-format csv \
+    --sweep --n-active "0 50 100" --runs 5
+```
+
+This creates CSV files in `_data/csv/` with naming pattern:
+- `single_N{n_monomers}_Nact{n_active}_kangle{kangle}_fact{fact}_{simid}_{phase}_{metric}.csv`
+- Example: `single_N200_Nact50_kangle0.0_fact5.0_run0_active_rg.csv`
 
 #### Time-Series Aggregation
 
@@ -579,6 +596,41 @@ n_active,n_runs,Rg_mean,Rg_std,Rg_sem
 --pattern "_data/csv/single_N200_Nact*_run*_active_rg.csv"  # correct
 --pattern _data/csv/single_N200_Nact*_run*_active_rg.csv    # may fail
 ```
+
+#### Complete Workflow Example
+
+Here's a full workflow from sweep to aggregated results:
+
+```bash
+# 1. Run a parameter sweep with CSV output
+./tools/sweep.sh param --config config/single_ring.toml \
+    --n-monomers 200 --metrics-format csv \
+    --sweep --n-active "0 50 100 150 200" --runs 5 --parallel 4
+
+# 2. Verify output files were created
+ls _data/csv/single_N200_Nact*_run*_active_rg.csv
+
+# 3. Aggregate time-series data (one file per n_active value)
+julia --project=. scripts/aggregate_sweep.jl \
+    --pattern "_data/csv/single_N200_Nact*_run*_active_rg.csv" \
+    --mode timeseries \
+    --group-by n_active \
+    --output-dir _data/aggregated
+
+# 4. Generate steady-state summary table
+julia --project=. scripts/aggregate_sweep.jl \
+    --pattern "_data/csv/single_N200_Nact*_run*_active_rg.csv" \
+    --mode summary \
+    --group-by n_active \
+    --tail-percent 20 \
+    --output _data/aggregated/rg_vs_nactive.csv
+```
+
+Output files:
+- `_data/aggregated/single_N200_Nact0_*_aggregated.csv` — time-series for n_active=0
+- `_data/aggregated/single_N200_Nact50_*_aggregated.csv` — time-series for n_active=50
+- ...
+- `_data/aggregated/rg_vs_nactive.csv` — summary table with one row per n_active
 
 #### Legacy Aggregation Script
 
