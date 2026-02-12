@@ -268,9 +268,11 @@ julia --project=. scripts/aggregate_sweep.jl \
 - `msd_com_frame` — MSD in COM frame (if `--msd-com-frame` enabled)
 
 **Double rings** (all columns above plus per-ring columns):
-- `msd_monomer_1`, `msd_monomer_2` — monomer MSD for each ring
+- `msd_monomer_1`, `msd_monomer_2` — monomer MSD for each ring (automatic)
 - `msd_com_1`, `msd_com_2` — COM MSD for each ring (if `--msd-com` enabled)
 - `msd_com_frame_1`, `msd_com_frame_2` — COM-frame MSD for each ring (if `--msd-com-frame` enabled)
+
+**Note**: Per-ring monomer MSD is computed automatically for double ring systems. The COM variants require their respective flags.
 
 ### Aggregated Output
 - `*_aggregated.csv` — time-series with mean, std, sem across runs

@@ -217,10 +217,21 @@ Output format for metrics (MSD, Rg): `jld2` or `csv`.
 - `csv`: Export metrics to separate CSV files (human-readable, easy to import in other tools)
 
 When using `csv` format, the following files are created:
-- `{params}_active_msd.csv` — MSD data (lag_time, msd_monomer, msd_com if enabled)
+- `{params}_active_msd.csv` — MSD data (see columns below)
 - `{params}_active_rg.csv` — Rg data (time, Rg, Rg1, Rg2, Rg3)
 - `{params}_thermal_msd.csv` — same for thermal phase
 - `{params}_thermal_rg.csv` — same for thermal phase
+
+**MSD CSV columns:**
+- `lag_time` — time lag
+- `msd_monomer` — monomer MSD (always included)
+- `msd_com` — center-of-mass MSD (if `--msd-com` enabled)
+- `msd_com_frame` — MSD in COM reference frame (if `--msd-com-frame` enabled)
+
+For double ring systems, per-ring columns are automatically included:
+- `msd_monomer_1`, `msd_monomer_2` — monomer MSD per ring
+- `msd_com_1`, `msd_com_2` — COM MSD per ring (if `--msd-com` enabled)
+- `msd_com_frame_1`, `msd_com_frame_2` — COM-frame MSD per ring (if `--msd-com-frame` enabled)
 
 **`--export-xyz`**
 Export XYZ trajectory files for visualization (disabled by default).
@@ -662,9 +673,11 @@ Additional data stored in JLD2:
 ### CSV Files (`_data/csv/`) — With `--metrics-format csv`
 
 Human-readable metric files:
-- `{params}_active_msd.csv` — MSD data with columns: lag_time, msd_monomer, msd_com (if enabled)
+- `{params}_active_msd.csv` — MSD data (see [MSD CSV columns](#output-options) for details)
 - `{params}_active_rg.csv` — Rg data with columns: time, Rg, Rg1, Rg2, Rg3
 - `{params}_thermal_msd.csv`, `{params}_thermal_rg.csv` — same for thermal phase
+
+For double ring systems, MSD files include per-ring columns (`msd_monomer_1`, `msd_monomer_2`, etc.).
 
 ### XYZ Trajectories (`_data/sims/`) — Optional
 
