@@ -78,6 +78,7 @@ end
 Logger for computing non-time-averaged Mean-Squared Displacement during simulation.
 
 Stores reference coordinates at initialization and computes MSD at each logging step.
+For double ring systems, computes MSD separately for each ring in addition to combined MSD.
 """
 struct MSDLogger
     log_steps::Set{Int64}
@@ -87,12 +88,28 @@ struct MSDLogger
     system_type::Symbol
     n_monomers_1::Int64
     n_monomers_2::Int64
+    # Combined reference data (all monomers)
     reference_coords::Vector{SVector{3,Float64}}  # Reference coordinates (t=0)
     reference_com::SVector{3,Float64}              # Reference center of mass
     reference_coords_com_frame::Vector{SVector{3,Float64}}  # Reference positions in COM frame
+    # Per-ring reference data (for double ring systems)
+    reference_coords_1::Vector{SVector{3,Float64}}
+    reference_coords_2::Vector{SVector{3,Float64}}
+    reference_com_1::SVector{3,Float64}
+    reference_com_2::SVector{3,Float64}
+    reference_coords_com_frame_1::Vector{SVector{3,Float64}}
+    reference_coords_com_frame_2::Vector{SVector{3,Float64}}
+    # Combined MSD timeseries (all monomers)
     msd_monomer::Vector{Float64}                   # Monomer MSD timeseries
     msd_com::Vector{Float64}                       # COM MSD timeseries
     msd_com_frame::Vector{Float64}                 # COM-frame MSD timeseries
+    # Per-ring MSD timeseries (for double ring systems)
+    msd_monomer_1::Vector{Float64}
+    msd_monomer_2::Vector{Float64}
+    msd_com_1::Vector{Float64}
+    msd_com_2::Vector{Float64}
+    msd_com_frame_1::Vector{Float64}
+    msd_com_frame_2::Vector{Float64}
 end
 
 """
@@ -100,6 +117,7 @@ end
               compute_com=true, compute_com_frame=false)
 
 Create MSDLogger with reference coordinates from the first frame.
+For double ring systems, also initializes per-ring reference data.
 """
 function MSDLogger(schedule::Vector{Int}, system_type::Symbol, n_monomers_1::Int64,
                    n_monomers_2::Int64, initial_coords::Vector{SVector{3,Float64}},
@@ -114,12 +132,41 @@ function MSDLogger(schedule::Vector{Int}, system_type::Symbol, n_monomers_1::Int
     # Compute reference coordinates in COM frame
     ref_coords_com_frame = compute_com_frame ? ref_coords .- Ref(ref_com) : SVector{3,Float64}[]
 
-    MSDLogger(Set{Int64}(schedule), Int64[], compute_com, compute_com_frame, system_type, n_monomers_1, n_monomers_2,
-              ref_coords, ref_com, ref_coords_com_frame, Float64[], Float64[], Float64[])
+    # Per-ring reference data (for double ring systems)
+    if system_type == :double
+        ref_coords_1 = unwrap_polymer(initial_coords[1:n_monomers_1], boundary)
+        ref_coords_2 = unwrap_polymer(initial_coords[n_monomers_1+1:n_total], boundary)
+
+        ref_com_1 = (compute_com || compute_com_frame) ? sum(ref_coords_1) / length(ref_coords_1) : SVector{3,Float64}(0, 0, 0)
+        ref_com_2 = (compute_com || compute_com_frame) ? sum(ref_coords_2) / length(ref_coords_2) : SVector{3,Float64}(0, 0, 0)
+
+        ref_coords_com_frame_1 = compute_com_frame ? ref_coords_1 .- Ref(ref_com_1) : SVector{3,Float64}[]
+        ref_coords_com_frame_2 = compute_com_frame ? ref_coords_2 .- Ref(ref_com_2) : SVector{3,Float64}[]
+    else
+        ref_coords_1 = SVector{3,Float64}[]
+        ref_coords_2 = SVector{3,Float64}[]
+        ref_com_1 = SVector{3,Float64}(0, 0, 0)
+        ref_com_2 = SVector{3,Float64}(0, 0, 0)
+        ref_coords_com_frame_1 = SVector{3,Float64}[]
+        ref_coords_com_frame_2 = SVector{3,Float64}[]
+    end
+
+    MSDLogger(
+        Set{Int64}(schedule), Int64[], compute_com, compute_com_frame, system_type, n_monomers_1, n_monomers_2,
+        # Combined reference data
+        ref_coords, ref_com, ref_coords_com_frame,
+        # Per-ring reference data
+        ref_coords_1, ref_coords_2, ref_com_1, ref_com_2, ref_coords_com_frame_1, ref_coords_com_frame_2,
+        # Combined MSD timeseries
+        Float64[], Float64[], Float64[],
+        # Per-ring MSD timeseries
+        Float64[], Float64[], Float64[], Float64[], Float64[], Float64[]
+    )
 end
 
 """
 Log MSD values at each step.
+For double ring systems, computes MSD separately for each ring in addition to combined MSD.
 """
 function Molly.log_property!(logger::MSDLogger, sys, buffers, neighbors=nothing,
                              step_n::Integer=0; n_threads=1, kwargs...)
@@ -134,7 +181,7 @@ function Molly.log_property!(logger::MSDLogger, sys, buffers, neighbors=nothing,
     # Get current coordinates (unwrapped)
     current_coords = unwrap_polymer(sys.coords[1:n_total], sys.boundary)
 
-    # Compute monomer MSD
+    # Compute monomer MSD (combined)
     diff = current_coords .- logger.reference_coords
     msd_mon = sum(d -> dot(d, d), diff) / length(diff)
     push!(logger.msd_monomer, msd_mon)
@@ -158,6 +205,43 @@ function Molly.log_property!(logger::MSDLogger, sys, buffers, neighbors=nothing,
         diff_com_frame = current_coords_com_frame .- logger.reference_coords_com_frame
         msd_com_frame_val = sum(d -> dot(d, d), diff_com_frame) / length(diff_com_frame)
         push!(logger.msd_com_frame, msd_com_frame_val)
+    end
+
+    # Per-ring MSD for double ring systems
+    if logger.system_type == :double
+        # Get per-ring coordinates
+        current_coords_1 = unwrap_polymer(sys.coords[1:logger.n_monomers_1], sys.boundary)
+        current_coords_2 = unwrap_polymer(sys.coords[logger.n_monomers_1+1:n_total], sys.boundary)
+
+        # Monomer MSD per ring
+        diff_1 = current_coords_1 .- logger.reference_coords_1
+        diff_2 = current_coords_2 .- logger.reference_coords_2
+        msd_mon_1 = sum(d -> dot(d, d), diff_1) / length(diff_1)
+        msd_mon_2 = sum(d -> dot(d, d), diff_2) / length(diff_2)
+        push!(logger.msd_monomer_1, msd_mon_1)
+        push!(logger.msd_monomer_2, msd_mon_2)
+
+        # Per-ring COM and COM MSD
+        if logger.compute_com
+            current_com_1 = sum(current_coords_1) / length(current_coords_1)
+            current_com_2 = sum(current_coords_2) / length(current_coords_2)
+            com_diff_1 = current_com_1 - logger.reference_com_1
+            com_diff_2 = current_com_2 - logger.reference_com_2
+            push!(logger.msd_com_1, dot(com_diff_1, com_diff_1))
+            push!(logger.msd_com_2, dot(com_diff_2, com_diff_2))
+        end
+
+        # Per-ring COM-frame MSD
+        if logger.compute_com_frame
+            current_com_1 = sum(current_coords_1) / length(current_coords_1)
+            current_com_2 = sum(current_coords_2) / length(current_coords_2)
+            current_coords_com_frame_1 = current_coords_1 .- Ref(current_com_1)
+            current_coords_com_frame_2 = current_coords_2 .- Ref(current_com_2)
+            diff_com_frame_1 = current_coords_com_frame_1 .- logger.reference_coords_com_frame_1
+            diff_com_frame_2 = current_coords_com_frame_2 .- logger.reference_coords_com_frame_2
+            push!(logger.msd_com_frame_1, sum(d -> dot(d, d), diff_com_frame_1) / length(diff_com_frame_1))
+            push!(logger.msd_com_frame_2, sum(d -> dot(d, d), diff_com_frame_2) / length(diff_com_frame_2))
+        end
     end
 end
 

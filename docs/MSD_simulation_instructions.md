@@ -27,10 +27,6 @@ This document provides instructions for running MSD simulations of random active
 2. **Double symmetric** — both rings have same n_active
 3. **Double asymmetric** — ring1 active, ring2 passive (n_active_2 = 0)
 
-### ⚠️ Important Limitation
-
-**Per-ring MSD is NOT currently implemented.** The MSD logger computes MSD averaged over ALL monomers from both rings combined. If you need separate MSD for each ring in double-ring systems, the codebase would need to be modified to add per-ring MSD computation (similar to how Rg is computed per-ring).
-
 ---
 
 ## Directory Structure
@@ -264,17 +260,17 @@ julia --project=. scripts/aggregate_sweep.jl \
 ## Output File Formats
 
 ### MSD CSV Columns
+
+**Single ring:**
 - `lag_time` — time lag (τ)
 - `msd_monomer` — average monomer MSD
-- `msd_com` — center-of-mass MSD (if enabled)
-- `msd_com_frame` — MSD in COM frame (if enabled)
+- `msd_com` — center-of-mass MSD (if `--msd-com` enabled)
+- `msd_com_frame` — MSD in COM frame (if `--msd-com-frame` enabled)
 
-**Note for double rings**: Currently, MSD is computed averaged over ALL monomers from both rings combined, not separately per ring. The columns are the same as single ring:
-- `msd_monomer` — averaged over all monomers from both rings
-- `msd_com` — center of mass of the entire system
-- `msd_com_frame` — internal fluctuations relative to combined COM
-
-If per-ring MSD is needed, this would require modifying the MSD logger in the codebase.
+**Double rings** (all columns above plus per-ring columns):
+- `msd_monomer_1`, `msd_monomer_2` — monomer MSD for each ring
+- `msd_com_1`, `msd_com_2` — COM MSD for each ring (if `--msd-com` enabled)
+- `msd_com_frame_1`, `msd_com_frame_2` — COM-frame MSD for each ring (if `--msd-com-frame` enabled)
 
 ### Aggregated Output
 - `*_aggregated.csv` — time-series with mean, std, sem across runs

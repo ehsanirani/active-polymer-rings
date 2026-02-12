@@ -867,7 +867,7 @@ function save_metrics_csv(params::Parameters, sys, output_dir::String, fname::St
         lag_times = collect(1:length(msd_logger.msd_monomer)) .* (dt * traj_int)
     end
 
-    # Monomer MSD
+    # Monomer MSD (combined)
     df_msd = DataFrame(
         lag_time = lag_times,
         msd_monomer = [format_val(x) for x in msd_logger.msd_monomer]
@@ -877,6 +877,19 @@ function save_metrics_csv(params::Parameters, sys, output_dir::String, fname::St
     end
     if params.msd_com_frame && !isempty(msd_logger.msd_com_frame)
         df_msd.msd_com_frame = [format_val(x) for x in msd_logger.msd_com_frame]
+    end
+    # Per-ring MSD for double ring systems
+    if params.system_type == :double && !isempty(msd_logger.msd_monomer_1)
+        df_msd.msd_monomer_1 = [format_val(x) for x in msd_logger.msd_monomer_1]
+        df_msd.msd_monomer_2 = [format_val(x) for x in msd_logger.msd_monomer_2]
+        if params.msd_com && !isempty(msd_logger.msd_com_1)
+            df_msd.msd_com_1 = [format_val(x) for x in msd_logger.msd_com_1]
+            df_msd.msd_com_2 = [format_val(x) for x in msd_logger.msd_com_2]
+        end
+        if params.msd_com_frame && !isempty(msd_logger.msd_com_frame_1)
+            df_msd.msd_com_frame_1 = [format_val(x) for x in msd_logger.msd_com_frame_1]
+            df_msd.msd_com_frame_2 = [format_val(x) for x in msd_logger.msd_com_frame_2]
+        end
     end
     CSV.write(joinpath(output_dir, "$(fname)_$(phase_str)_msd.csv"), df_msd)
 
