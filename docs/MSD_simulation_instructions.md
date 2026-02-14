@@ -279,11 +279,17 @@ Each simulation produces two MSD files:
 
 The time-averaged MSD uses multiple time origins for better statistics, especially useful for shorter trajectories.
 
-**Time sampling differences:**
-- **Single-origin MSD**: Uses the sampling specified by `--msd-mode` (e.g., `logspaced` for dense early-time sampling)
-- **Time-averaged MSD**: Uses uniform spacing based on `--traj-interval` (coordinate save frequency)
+**⚠️ Critical: Time sampling differences:**
+- **Single-origin MSD**: Uses the sampling specified by `--msd-mode` (e.g., `logspaced` for dense early-time sampling). Can capture lag times as small as `dt`.
+- **Time-averaged MSD**: Uses **uniform spacing** determined by `--traj-interval`. The minimum lag time is `dt × traj_interval`.
 
-This means the two files have different lag time grids. The single-origin file captures short-time dynamics with logspaced sampling, while the time-averaged file provides smoother statistics at the cost of uniform (not logspaced) time points.
+**Example:** With `dt=0.01` and `--traj-interval 500` (default):
+- Single-origin MSD can sample at τ = 0.01, 0.02, 0.03, ... (logspaced)
+- Time-averaged MSD starts at τ = 5.0, 10.0, 15.0, ... (uniform, Δτ = 5.0)
+
+**To capture short-time dynamics in time-averaged MSD**, reduce `--traj-interval` (e.g., `--traj-interval 100`). Note this increases output file sizes.
+
+The trade-off: single-origin captures short times but is noisy; time-averaged is smoother but may miss early-time behavior unless `--traj-interval` is small.
 
 ### MSD CSV Columns
 

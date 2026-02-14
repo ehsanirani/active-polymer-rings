@@ -136,6 +136,8 @@ Allows the system to relax to a typical equilibrium configuration. Typical: 10�
 Trajectory logging interval. Coordinates and tangent vectors are saved every N steps.
 Lower values = more frequent logging = larger output files. Higher values = less temporal resolution.
 
+**Important for time-averaged MSD:** This parameter determines the minimum lag time resolution for time-averaged MSD. The smallest lag time in `*_msd_timeaveraged.csv` is `dt × traj_interval`. To capture short-time dynamics in time-averaged MSD, use a smaller `--traj-interval`.
+
 ### Metric Logging
 
 Metric loggers (MSD, Rg) can run on a separate schedule from trajectory loggers (coordinates, tangents). This is useful for capturing early-time dynamics with logarithmic spacing while keeping trajectory files manageable.
@@ -211,9 +213,11 @@ By default, only the non-time-averaged (single t₀) MSD from the simulation log
 With `--metrics-format jld2`: Coordinate trajectories are stored in the JLD2 file for post-processing.
 With `--metrics-format csv`: Time-averaged MSD is computed and exported to a separate `*_msd_timeaveraged.csv` file.
 
-**Note on time sampling:**
-- Single-origin MSD (`*_msd.csv`): Uses the sampling mode specified by `--msd-mode` (e.g., logspaced)
-- Time-averaged MSD (`*_msd_timeaveraged.csv`): Uses uniform spacing based on `--traj-interval`
+**Important — Time sampling differences:**
+- **Single-origin MSD** (`*_msd.csv`): Uses the sampling mode specified by `--msd-mode` (e.g., logspaced). Can capture very short lag times.
+- **Time-averaged MSD** (`*_msd_timeaveraged.csv`): Uses **uniform spacing** determined by `--traj-interval`. The minimum lag time is `dt × traj_interval`, so short-time dynamics may not be captured unless `--traj-interval` is small.
+
+To get time-averaged MSD at short lag times, reduce `--traj-interval` (note: this increases file sizes).
 
 ### Output Options
 
