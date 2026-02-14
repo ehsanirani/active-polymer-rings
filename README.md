@@ -205,9 +205,11 @@ Enable center-of-mass MSD computation during simulation and analysis.
 By default, only monomer MSD is computed. Use this flag to also compute COM MSD.
 
 **`--msd-time-averaged`**
-Enable time-averaged MSD computation in post-processing analysis scripts.
-By default, only the non-time-averaged (single t₀) MSD from the simulation logger is used. Use this flag to also compute time-averaged MSD from coordinate trajectories.
-Note: This flag causes coordinate trajectories to be stored in the JLD2 file (required for time-averaged computation).
+Enable time-averaged MSD computation using multiple time origins for better statistics.
+By default, only the non-time-averaged (single t₀) MSD from the simulation logger is used.
+
+With `--metrics-format jld2`: Coordinate trajectories are stored in the JLD2 file for post-processing.
+With `--metrics-format csv`: Time-averaged MSD is computed and exported to a separate `*_msd_timeaveraged.csv` file.
 
 ### Output Options
 
@@ -218,6 +220,7 @@ Output format for metrics (MSD, Rg): `jld2` or `csv`.
 
 When using `csv` format, the following files are created:
 - `{params}_active_msd.csv` — MSD data (see columns below)
+- `{params}_active_msd_timeaveraged.csv` — Time-averaged MSD (if `--msd-time-averaged` enabled)
 - `{params}_active_rg.csv` — Rg data (time, Rg, Rg1, Rg2, Rg3)
 - `{params}_thermal_msd.csv` — same for thermal phase
 - `{params}_thermal_rg.csv` — same for thermal phase
