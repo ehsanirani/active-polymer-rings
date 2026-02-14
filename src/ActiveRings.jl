@@ -27,7 +27,8 @@ export CheckpointLogger, get_latest_checkpoint
 
 # Analysis exports
 export gyration_tensor_eigenvalues, compute_rg_timeseries
-export compute_msd, compute_rs, compute_beta
+export compute_msd, compute_msd_com_timeaveraged, compute_msd_com_frame
+export compute_rs, compute_beta
 export compute_autocorrelation, estimate_correlation_time
 export load_simulation_data, split_rings_coords, split_rings_tangents
 export save_rg_csv, save_msd_csv, save_rs_csv, save_beta_csv

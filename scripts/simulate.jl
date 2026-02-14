@@ -180,7 +180,7 @@ function parse_commandline()
             dest_name = "msd_com_frame"
 
         "--msd-time-averaged"
-            help = "Enable time-averaged MSD computation (stores coords in JLD2)"
+            help = "Enable time-averaged MSD computation (with CSV format: exports to separate *_msd_timeaveraged.csv file)"
             arg_type = Bool
             default = nothing
             dest_name = "msd_time_averaged"
@@ -837,6 +837,9 @@ function save_results(params::Parameters, thermal_sys, active_sys, sim_bodies; s
 
         println("\n✓ Results saved:")
         println("  CSV:  $(csv_dir)/$(fname)_*.csv")
+        if params.msd_time_averaged
+            println("        (includes time-averaged MSD)")
+        end
         println("  JLD2: $(jld2_file) (params only)")
     end
 
@@ -846,6 +849,83 @@ function save_results(params::Parameters, thermal_sys, active_sys, sim_bodies; s
         save_xyz(active_sys, sim_bodies, joinpath(sims_dir, "$(fname)_active.xyz"))
         println("  XYZ:  $(sims_dir)/$(fname)_{thermal,active}.xyz")
     end
+end
+
+"""
+Save time-averaged MSD to a separate CSV file.
+
+Time-averaged MSD is computed from coordinate trajectories using multiple time origins,
+which provides better statistics than single-origin MSD.
+"""
+function save_timeaveraged_msd_csv(params::Parameters, coords_history, output_dir::String,
+                                    fname::String, phase_str::String, dt::Float64)
+    format_val(x) = @sprintf("%.6f", x)
+    traj_int = params.traj_interval
+    time_interval = dt * traj_int
+
+    if params.system_type == :single
+        # Single ring: compute time-averaged MSD for the whole system
+        msd_monomer_avg = compute_msd(coords_history)
+        n_lags = length(msd_monomer_avg)
+        lag_times_avg = collect(1:n_lags) .* time_interval
+
+        df_msd_avg = DataFrame(
+            lag_time = lag_times_avg,
+            msd_monomer = [format_val(x) for x in msd_monomer_avg]
+        )
+
+        if params.msd_com
+            msd_com_avg = compute_msd_com_timeaveraged(coords_history)
+            df_msd_avg.msd_com = [format_val(x) for x in msd_com_avg]
+        end
+
+        if params.msd_com_frame
+            msd_com_frame_avg = compute_msd_com_frame(coords_history)
+            df_msd_avg.msd_com_frame = [format_val(x) for x in msd_com_frame_avg]
+        end
+
+    else
+        # Double ring: split coords and compute per-ring time-averaged MSD
+        n1 = params.n_monomers_1
+        n2 = params.n_monomers_2
+        coords_ring1, coords_ring2 = split_rings_coords(coords_history, n1, n2)
+
+        # Combined MSD (all monomers)
+        msd_monomer_avg = compute_msd(coords_history)
+        n_lags = length(msd_monomer_avg)
+        lag_times_avg = collect(1:n_lags) .* time_interval
+
+        # Per-ring MSD
+        msd_monomer_1_avg = compute_msd(coords_ring1)
+        msd_monomer_2_avg = compute_msd(coords_ring2)
+
+        df_msd_avg = DataFrame(
+            lag_time = lag_times_avg,
+            msd_monomer = [format_val(x) for x in msd_monomer_avg],
+            msd_monomer_1 = [format_val(x) for x in msd_monomer_1_avg],
+            msd_monomer_2 = [format_val(x) for x in msd_monomer_2_avg]
+        )
+
+        if params.msd_com
+            msd_com_avg = compute_msd_com_timeaveraged(coords_history)
+            msd_com_1_avg = compute_msd_com_timeaveraged(coords_ring1)
+            msd_com_2_avg = compute_msd_com_timeaveraged(coords_ring2)
+            df_msd_avg.msd_com = [format_val(x) for x in msd_com_avg]
+            df_msd_avg.msd_com_1 = [format_val(x) for x in msd_com_1_avg]
+            df_msd_avg.msd_com_2 = [format_val(x) for x in msd_com_2_avg]
+        end
+
+        if params.msd_com_frame
+            msd_com_frame_avg = compute_msd_com_frame(coords_history)
+            msd_com_frame_1_avg = compute_msd_com_frame(coords_ring1)
+            msd_com_frame_2_avg = compute_msd_com_frame(coords_ring2)
+            df_msd_avg.msd_com_frame = [format_val(x) for x in msd_com_frame_avg]
+            df_msd_avg.msd_com_frame_1 = [format_val(x) for x in msd_com_frame_1_avg]
+            df_msd_avg.msd_com_frame_2 = [format_val(x) for x in msd_com_frame_2_avg]
+        end
+    end
+
+    CSV.write(joinpath(output_dir, "$(fname)_$(phase_str)_msd_timeaveraged.csv"), df_msd_avg)
 end
 
 """
@@ -892,6 +972,14 @@ function save_metrics_csv(params::Parameters, sys, output_dir::String, fname::St
         end
     end
     CSV.write(joinpath(output_dir, "$(fname)_$(phase_str)_msd.csv"), df_msd)
+
+    # Compute and save time-averaged MSD if enabled
+    if params.msd_time_averaged && haskey(sys.loggers, "coords")
+        coords_history = sys.loggers["coords"].history
+        if !isempty(coords_history)
+            save_timeaveraged_msd_csv(params, coords_history, output_dir, fname, phase_str, dt)
+        end
+    end
 
     # Save Rg data
     rg_logger = sys.loggers["rg"]
@@ -964,6 +1052,9 @@ function save_results_active_only(params::Parameters, active_sys, sim_bodies; si
 
         println("\n✓ Results saved:")
         println("  CSV:  $(csv_dir)/$(fname)_*.csv")
+        if params.msd_time_averaged
+            println("        (includes time-averaged MSD)")
+        end
         println("  JLD2: $(jld2_file) (params only)")
     end
 

@@ -16,6 +16,12 @@ This document provides instructions for running MSD simulations of random active
 2. **COM MSD** — center-of-mass motion (`--msd-com`)
 3. **COM-frame MSD** — internal fluctuations (`--msd-com-frame`)
 
+### Time-Averaged MSD
+Use `--msd-time-averaged true` to compute time-averaged MSD using multiple time origins for better statistics. This exports an additional `*_msd_timeaveraged.csv` file alongside the standard MSD file.
+
+### Base State
+The sweep script defaults to `--base-state passive`, which creates a thermalized initial configuration before running active dynamics. This requires `--n-monomers` to be specified.
+
 ### Time Scales
 | Scale | dt | n_steps | Total time |
 |-------|-----|---------|------------|
@@ -67,6 +73,7 @@ _data/
     --dt 1e-5 --n-steps 1000000 \
     --msd-mode logspaced --msd-npoints 2000 \
     --msd-com true --msd-com-frame true \
+    --msd-time-averaged true \
     --metrics-format csv \
     --sweep --n-active "0 50 100 150 200" \
     --runs 100 --parallel 8
@@ -81,6 +88,7 @@ _data/
     --dt 0.01 --n-steps 100000 \
     --msd-mode logspaced --msd-npoints 2000 \
     --msd-com true --msd-com-frame true \
+    --msd-time-averaged true \
     --metrics-format csv \
     --sweep --n-active "0 50 100 150 200" \
     --runs 100 --parallel 8
@@ -124,6 +132,7 @@ for nact in 0 50 100 150 200; do
         --dt 1e-5 --n-steps 1000000 \
         --msd-mode logspaced --msd-npoints 2000 \
         --msd-com true --msd-com-frame true \
+        --msd-time-averaged true \
         --metrics-format csv \
         --runs 100 --parallel 8
 done
@@ -141,6 +150,7 @@ for nact in 0 50 100 150 200; do
         --dt 0.01 --n-steps 100000 \
         --msd-mode logspaced --msd-npoints 2000 \
         --msd-com true --msd-com-frame true \
+        --msd-time-averaged true \
         --metrics-format csv \
         --runs 100 --parallel 8
 done
@@ -163,6 +173,7 @@ Ring 1 is active (n_active_1 varies), Ring 2 is passive (n_active_2 = 0).
     --dt 1e-5 --n-steps 1000000 \
     --msd-mode logspaced --msd-npoints 2000 \
     --msd-com true --msd-com-frame true \
+    --msd-time-averaged true \
     --metrics-format csv \
     --sweep --n-active-1 "0 50 100 150 200" \
     --runs 100 --parallel 8
@@ -179,6 +190,7 @@ Ring 1 is active (n_active_1 varies), Ring 2 is passive (n_active_2 = 0).
     --dt 0.01 --n-steps 100000 \
     --msd-mode logspaced --msd-npoints 2000 \
     --msd-com true --msd-com-frame true \
+    --msd-time-averaged true \
     --metrics-format csv \
     --sweep --n-active-1 "0 50 100 150 200" \
     --runs 100 --parallel 8
@@ -259,6 +271,26 @@ julia --project=. scripts/aggregate_sweep.jl \
 
 ## Output File Formats
 
+### MSD CSV Files
+
+Each simulation produces two MSD files:
+- `*_active_msd.csv` — single-origin MSD (computed during simulation)
+- `*_active_msd_timeaveraged.csv` — time-averaged MSD (if `--msd-time-averaged` enabled)
+
+The time-averaged MSD uses multiple time origins for better statistics, especially useful for shorter trajectories.
+
+**⚠️ Critical: Time sampling differences:**
+- **Single-origin MSD**: Uses the sampling specified by `--msd-mode` (e.g., `logspaced` for dense early-time sampling). Can capture lag times as small as `dt`.
+- **Time-averaged MSD**: Uses **uniform spacing** determined by `--traj-interval`. The minimum lag time is `dt × traj_interval`.
+
+**Example:** With `dt=0.01` and `--traj-interval 500` (default):
+- Single-origin MSD can sample at τ = 0.01, 0.02, 0.03, ... (logspaced)
+- Time-averaged MSD starts at τ = 5.0, 10.0, 15.0, ... (uniform, Δτ = 5.0)
+
+**To capture short-time dynamics in time-averaged MSD**, reduce `--traj-interval` (e.g., `--traj-interval 100`). Note this increases output file sizes.
+
+The trade-off: single-origin captures short times but is noisy; time-averaged is smoother but may miss early-time behavior unless `--traj-interval` is small.
+
 ### MSD CSV Columns
 
 **Single ring:**
@@ -294,6 +326,7 @@ julia --project=. scripts/aggregate_sweep.jl \
 4. **Dry run**: Add `--dry-run` to preview commands without executing:
    ```bash
    ./tools/sweep.sh param --config config/single_ring.toml \
+       --n-monomers 200 \
        --sweep --n-active "0 50 100 150 200" --runs 100 --dry-run
    ```
 

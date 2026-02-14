@@ -68,7 +68,7 @@ RUN_START=0
 SWEEP_ID=""
 
 # Base state options
-BASE_STATE_TYPE=""
+BASE_STATE_TYPE="passive"
 BASE_STATE_PER_RUN=false
 N_MONOMERS=""
 THERMAL_STEPS=2000000
@@ -111,9 +111,9 @@ usage_param() {
     echo "                             (by default, existing simulations are skipped)"
     echo ""
     echo "Base state options:"
-    echo "  --base-state TYPE          passive, active, or file path"
+    echo "  --base-state TYPE          passive (default), active, or file path"
     echo "  --base-state-per-run       Create separate base state for each replica"
-    echo "  --n-monomers N             Number of monomers (required with passive/active)"
+    echo "  --n-monomers N             Number of monomers (required)"
     echo "  --thermal-steps N          Thermal steps for base state (default: 2000000)"
     echo "  --fact F                   Active force for base state (default: 5.0)"
     echo ""
@@ -161,9 +161,9 @@ usage_grid() {
     echo "                             (by default, existing simulations are skipped)"
     echo ""
     echo "Base state options:"
-    echo "  --base-state TYPE          passive, active, or file path"
+    echo "  --base-state TYPE          passive (default), active, or file path"
     echo "  --base-state-per-run       Create separate base state for each replica"
-    echo "  --n-monomers N             Number of monomers (required with passive/active)"
+    echo "  --n-monomers N             Number of monomers (required)"
     echo "  --thermal-steps N          Thermal steps for base state (default: 2000000)"
     echo "  --fact F                   Active force for base state (default: 5.0)"
     echo ""
