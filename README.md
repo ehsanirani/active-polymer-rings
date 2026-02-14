@@ -211,6 +211,10 @@ By default, only the non-time-averaged (single t₀) MSD from the simulation log
 With `--metrics-format jld2`: Coordinate trajectories are stored in the JLD2 file for post-processing.
 With `--metrics-format csv`: Time-averaged MSD is computed and exported to a separate `*_msd_timeaveraged.csv` file.
 
+**Note on time sampling:**
+- Single-origin MSD (`*_msd.csv`): Uses the sampling mode specified by `--msd-mode` (e.g., logspaced)
+- Time-averaged MSD (`*_msd_timeaveraged.csv`): Uses uniform spacing based on `--traj-interval`
+
 ### Output Options
 
 **`--metrics-format`** (default: `jld2`)
