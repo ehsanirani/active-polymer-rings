@@ -47,9 +47,9 @@ function parse_commandline()
             arg_type = String
             default = "_data/plots"
         "--pattern"
-            help = "Filename pattern to match (e.g., block_*)"
+            help = "Filename pattern to match (e.g., single_*)"
             arg_type = String
-            default = "block_*"
+            default = "single_*"
         "--tail-percent"
             help = "Percentage of data points from end to use for mean calculation"
             arg_type = Float64
