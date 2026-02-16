@@ -1,7 +1,7 @@
 using Random
 using JLD2
 
-export AbstractParameters, Parameters
+export AbstractParameters, Parameters, get_msd_precision, get_rg_precision
 
 abstract type AbstractParameters end
 
@@ -28,6 +28,9 @@ mutable struct Parameters <: AbstractParameters
     msd_time_averaged::Bool    # compute time-averaged MSD in analysis (requires storing coords)
     export_xyz::Bool           # export XYZ trajectory files
     metrics_format::Symbol     # :jld2 or :csv
+    metric_precision::Int64    # decimal places for metric CSV output (default: 4)
+    msd_precision::Union{Nothing, Int64}  # decimal places for MSD (nothing = use metric_precision)
+    rg_precision::Union{Nothing, Int64}   # decimal places for Rg (nothing = use metric_precision)
     nthreads::Int64
     γ::Float64
     rcut_nf::Float64
@@ -59,6 +62,7 @@ function Parameters(; system_type::Symbol=:single,
                    dt=0.01, dt_thermal=0.0, n_steps=100_000, thermal_steps=100_000,
                    traj_interval=500, metric_mode=:fixed, metric_interval=0, metric_npoints=1000,
                    msd_com=false, msd_com_frame=false, msd_time_averaged=false, export_xyz=false, metrics_format=:jld2,
+                   metric_precision=4, msd_precision=nothing, rg_precision=nothing,
                    L=0.0, nthreads=0, γ=2.0, rcut_nf=2.0,
                    # Activity distribution
                    activity_pattern=:random,
@@ -114,6 +118,7 @@ function Parameters(; system_type::Symbol=:single,
         KT, mass, kbond, kangle, factive, dt, dt_thermal, n_steps, thermal_steps,
         traj_interval, metric_mode, metric_interval, metric_npoints,
         msd_com, msd_com_frame, msd_time_averaged, export_xyz, metrics_format,
+        metric_precision, msd_precision, rg_precision,
         nthreads, γ, rcut_nf, L,
         activity_pattern,
         init_method, init_kmax, init_adaptive_kmax, init_thermal_scale, init_rg_calibrate,
@@ -166,40 +171,38 @@ function get_activity_vector(params::Parameters)
     end
 end
 
-# JLD2 backward compatibility: handle old Parameters structs missing msd_com_frame field
+# Get effective MSD precision (falls back to metric_precision if not set)
+function get_msd_precision(params::Parameters)
+    return params.msd_precision !== nothing ? params.msd_precision : params.metric_precision
+end
+
+# Get effective Rg precision (falls back to metric_precision if not set)
+function get_rg_precision(params::Parameters)
+    return params.rg_precision !== nothing ? params.rg_precision : params.metric_precision
+end
+
+# JLD2 backward compatibility: handle old Parameters structs missing newer fields
 function JLD2.rconvert(::Type{Parameters}, x::JLD2.ReconstructedMutable{:Parameters})
     # Get field names from the reconstructed type
     field_names = fieldnames(typeof(x))
 
-    # Check if msd_com_frame is missing (old format)
-    if !(:msd_com_frame in field_names)
-        # Reconstruct with default msd_com_frame=false
-        return Parameters(
-            x.system_type,
-            x.KT, x.mass, x.kbond, x.kangle, x.factive, x.dt, x.dt_thermal,
-            x.n_steps, x.thermal_steps, x.traj_interval, x.metric_mode,
-            x.metric_interval, x.metric_npoints, x.msd_com,
-            false,  # msd_com_frame default
-            x.msd_time_averaged, x.export_xyz, x.metrics_format,
-            x.nthreads, x.γ, x.rcut_nf, x.L, x.activity_pattern,
-            x.init_method, x.init_kmax, x.init_adaptive_kmax,
-            x.init_thermal_scale, x.init_rg_calibrate,
-            x.n_monomers, x.n_active,
-            x.n_monomers_1, x.n_monomers_2, x.n_active_1, x.n_active_2
-        )
-    else
-        # All fields present, direct construction
-        return Parameters(
-            x.system_type,
-            x.KT, x.mass, x.kbond, x.kangle, x.factive, x.dt, x.dt_thermal,
-            x.n_steps, x.thermal_steps, x.traj_interval, x.metric_mode,
-            x.metric_interval, x.metric_npoints, x.msd_com, x.msd_com_frame,
-            x.msd_time_averaged, x.export_xyz, x.metrics_format,
-            x.nthreads, x.γ, x.rcut_nf, x.L, x.activity_pattern,
-            x.init_method, x.init_kmax, x.init_adaptive_kmax,
-            x.init_thermal_scale, x.init_rg_calibrate,
-            x.n_monomers, x.n_active,
-            x.n_monomers_1, x.n_monomers_2, x.n_active_1, x.n_active_2
-        )
-    end
+    # Extract values with defaults for missing fields
+    msd_com_frame = :msd_com_frame in field_names ? x.msd_com_frame : false
+    metric_precision = :metric_precision in field_names ? x.metric_precision : 4
+    msd_precision = :msd_precision in field_names ? x.msd_precision : nothing
+    rg_precision = :rg_precision in field_names ? x.rg_precision : nothing
+
+    return Parameters(
+        x.system_type,
+        x.KT, x.mass, x.kbond, x.kangle, x.factive, x.dt, x.dt_thermal,
+        x.n_steps, x.thermal_steps, x.traj_interval, x.metric_mode,
+        x.metric_interval, x.metric_npoints, x.msd_com, msd_com_frame,
+        x.msd_time_averaged, x.export_xyz, x.metrics_format,
+        metric_precision, msd_precision, rg_precision,
+        x.nthreads, x.γ, x.rcut_nf, x.L, x.activity_pattern,
+        x.init_method, x.init_kmax, x.init_adaptive_kmax,
+        x.init_thermal_scale, x.init_rg_calibrate,
+        x.n_monomers, x.n_active,
+        x.n_monomers_1, x.n_monomers_2, x.n_active_1, x.n_active_2
+    )
 end

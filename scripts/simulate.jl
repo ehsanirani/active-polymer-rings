@@ -197,6 +197,24 @@ function parse_commandline()
             default = nothing
             dest_name = "metrics_format"
 
+        "--metric-precision"
+            help = "Decimal places for metric CSV output (default: 4)"
+            arg_type = Int
+            default = nothing
+            dest_name = "metric_precision"
+
+        "--msd-precision"
+            help = "Decimal places for MSD output (default: use --metric-precision)"
+            arg_type = Int
+            default = nothing
+            dest_name = "msd_precision"
+
+        "--rg-precision"
+            help = "Decimal places for Rg output (default: use --metric-precision)"
+            arg_type = Int
+            default = nothing
+            dest_name = "rg_precision"
+
         "--L"
             help = "Box size (0 to auto-calculate)"
             arg_type = Float64
@@ -389,6 +407,7 @@ function load_config(config_path::String)
         get!(flat, :msd_mode, get(msd, "mode", nothing))
         get!(flat, :msd_interval, get(msd, "interval", nothing))
         get!(flat, :msd_npoints, get(msd, "npoints", nothing))
+        get!(flat, :msd_precision, get(msd, "precision", nothing))
     end
 
     # Rg
@@ -398,6 +417,7 @@ function load_config(config_path::String)
         get!(flat, :rg_mode, get(rg, "mode", nothing))
         get!(flat, :rg_interval, get(rg, "interval", nothing))
         get!(flat, :rg_npoints, get(rg, "npoints", nothing))
+        get!(flat, :rg_precision, get(rg, "precision", nothing))
     end
 
     # Output
@@ -405,6 +425,7 @@ function load_config(config_path::String)
         out = config["output"]
         get!(flat, :export_xyz, get(out, "export_xyz", nothing))
         get!(flat, :metrics_format, get(out, "metrics_format", nothing))
+        get!(flat, :metric_precision, get(out, "metric_precision", nothing))
     end
 
     # Activity
@@ -476,6 +497,9 @@ function merge_config(cli_args::Dict{Symbol,Any}, config::Dict{Symbol,Any})
         :rg_npoints => nothing,
         :export_xyz => false,
         :metrics_format => "jld2",
+        :metric_precision => 4,
+        :msd_precision => nothing,
+        :rg_precision => nothing,
         :activity_pattern => "random",
         :init_method => "fourier",
         :init_kmax => 10,
@@ -859,7 +883,8 @@ which provides better statistics than single-origin MSD.
 """
 function save_timeaveraged_msd_csv(params::Parameters, coords_history, output_dir::String,
                                     fname::String, phase_str::String, dt::Float64)
-    format_val(x) = @sprintf("%.6f", x)
+    msd_prec = get_msd_precision(params)
+    format_val(x) = format_with_precision(x, msd_prec)
     traj_int = params.traj_interval
     time_interval = dt * traj_int
 
@@ -935,8 +960,13 @@ function save_metrics_csv(params::Parameters, sys, output_dir::String, fname::St
     phase_str = string(phase)
     dt = phase == :active ? params.dt : params.dt_thermal
 
-    # Format function for values
-    format_val(x) = @sprintf("%.6f", x)
+    # Get precision for each metric type
+    msd_prec = get_msd_precision(params)
+    rg_prec = get_rg_precision(params)
+
+    # Format functions with configurable precision
+    format_msd(x) = format_with_precision(x, msd_prec)
+    format_rg(x) = format_with_precision(x, rg_prec)
 
     # Save MSD data
     msd_logger = sys.loggers["msd"]
@@ -950,25 +980,25 @@ function save_metrics_csv(params::Parameters, sys, output_dir::String, fname::St
     # Monomer MSD (combined)
     df_msd = DataFrame(
         lag_time = lag_times,
-        msd_monomer = [format_val(x) for x in msd_logger.msd_monomer]
+        msd_monomer = [format_msd(x) for x in msd_logger.msd_monomer]
     )
     if params.msd_com && !isempty(msd_logger.msd_com)
-        df_msd.msd_com = [format_val(x) for x in msd_logger.msd_com]
+        df_msd.msd_com = [format_msd(x) for x in msd_logger.msd_com]
     end
     if params.msd_com_frame && !isempty(msd_logger.msd_com_frame)
-        df_msd.msd_com_frame = [format_val(x) for x in msd_logger.msd_com_frame]
+        df_msd.msd_com_frame = [format_msd(x) for x in msd_logger.msd_com_frame]
     end
     # Per-ring MSD for double ring systems
     if params.system_type == :double && !isempty(msd_logger.msd_monomer_1)
-        df_msd.msd_monomer_1 = [format_val(x) for x in msd_logger.msd_monomer_1]
-        df_msd.msd_monomer_2 = [format_val(x) for x in msd_logger.msd_monomer_2]
+        df_msd.msd_monomer_1 = [format_msd(x) for x in msd_logger.msd_monomer_1]
+        df_msd.msd_monomer_2 = [format_msd(x) for x in msd_logger.msd_monomer_2]
         if params.msd_com && !isempty(msd_logger.msd_com_1)
-            df_msd.msd_com_1 = [format_val(x) for x in msd_logger.msd_com_1]
-            df_msd.msd_com_2 = [format_val(x) for x in msd_logger.msd_com_2]
+            df_msd.msd_com_1 = [format_msd(x) for x in msd_logger.msd_com_1]
+            df_msd.msd_com_2 = [format_msd(x) for x in msd_logger.msd_com_2]
         end
         if params.msd_com_frame && !isempty(msd_logger.msd_com_frame_1)
-            df_msd.msd_com_frame_1 = [format_val(x) for x in msd_logger.msd_com_frame_1]
-            df_msd.msd_com_frame_2 = [format_val(x) for x in msd_logger.msd_com_frame_2]
+            df_msd.msd_com_frame_1 = [format_msd(x) for x in msd_logger.msd_com_frame_1]
+            df_msd.msd_com_frame_2 = [format_msd(x) for x in msd_logger.msd_com_frame_2]
         end
     end
     CSV.write(joinpath(output_dir, "$(fname)_$(phase_str)_msd.csv"), df_msd)
@@ -992,10 +1022,10 @@ function save_metrics_csv(params::Parameters, sys, output_dir::String, fname::St
 
     df_rg = DataFrame(
         time = rg_times,
-        Rg = [format_val(x) for x in rg_logger.Rg_total],
-        Rg1 = [format_val(x) for x in rg_logger.Rg1],
-        Rg2 = [format_val(x) for x in rg_logger.Rg2],
-        Rg3 = [format_val(x) for x in rg_logger.Rg3]
+        Rg = [format_rg(x) for x in rg_logger.Rg_total],
+        Rg1 = [format_rg(x) for x in rg_logger.Rg1],
+        Rg2 = [format_rg(x) for x in rg_logger.Rg2],
+        Rg3 = [format_rg(x) for x in rg_logger.Rg3]
     )
     CSV.write(joinpath(output_dir, "$(fname)_$(phase_str)_rg.csv"), df_rg)
 end
@@ -1160,6 +1190,9 @@ function main(args=ARGS)
             msd_time_averaged=cfg[:msd_time_averaged],
             export_xyz=cfg[:export_xyz],
             metrics_format=Symbol(cfg[:metrics_format]),
+            metric_precision=cfg[:metric_precision],
+            msd_precision=cfg[:msd_precision],
+            rg_precision=cfg[:rg_precision],
             activity_pattern=Symbol(cfg[:activity_pattern]),
             init_method=Symbol(cfg[:init_method]),
             init_kmax=cfg[:init_kmax],
@@ -1195,6 +1228,9 @@ function main(args=ARGS)
             msd_time_averaged=cfg[:msd_time_averaged],
             export_xyz=cfg[:export_xyz],
             metrics_format=Symbol(cfg[:metrics_format]),
+            metric_precision=cfg[:metric_precision],
+            msd_precision=cfg[:msd_precision],
+            rg_precision=cfg[:rg_precision],
             activity_pattern=Symbol(cfg[:activity_pattern]),
             init_method=Symbol(cfg[:init_method]),
             init_kmax=cfg[:init_kmax],

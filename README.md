@@ -244,6 +244,34 @@ For double ring systems, per-ring columns are automatically included:
 - `msd_com_1`, `msd_com_2` — COM MSD per ring (if `--msd-com` enabled)
 - `msd_com_frame_1`, `msd_com_frame_2` — COM-frame MSD per ring (if `--msd-com-frame` enabled)
 
+**`--metric-precision`** (default: 4)
+Number of decimal places for metric CSV output. This is the default precision used for all metrics (MSD, Rg, Rs, beta).
+
+**`--msd-precision`** (default: use `--metric-precision`)
+Number of decimal places specifically for MSD output. Overrides `--metric-precision` for MSD files only.
+
+**`--rg-precision`** (default: use `--metric-precision`)
+Number of decimal places specifically for Rg output. Overrides `--metric-precision` for Rg files only.
+
+**Example: Different precision for MSD and Rg**
+```bash
+# Use 6 decimal places for MSD, 4 for Rg
+julia --project=. scripts/simulate.jl --config config/single_ring.toml \
+  --metric-precision 4 --msd-precision 6
+```
+
+These options can also be set in config files:
+```toml
+[output]
+metric_precision = 4  # default for all metrics
+
+[msd]
+precision = 6  # override for MSD only
+
+[rg]
+precision = 4  # override for Rg only (optional)
+```
+
 **`--export-xyz`**
 Export XYZ trajectory files for visualization (disabled by default).
 Creates `{params}_thermal.xyz` and `{params}_active.xyz` files in `_data/sims/`.

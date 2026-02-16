@@ -36,10 +36,15 @@ metric_npoints = 1000        # Number of log-spaced sample points
 [msd]
 msd_com = false              # Compute center-of-mass MSD
 msd_time_averaged = false    # Compute time-averaged MSD (stores coords in JLD2)
+# precision = 4              # Decimal places for MSD output (default: use metric_precision)
+
+[rg]
+# precision = 4              # Decimal places for Rg output (default: use metric_precision)
 
 [output]
 export_xyz = false           # Export XYZ trajectory files
 metrics_format = "csv"       # "jld2" or "csv"
+metric_precision = 4         # Decimal places for metric CSV output (default for MSD, Rg, etc.)
 
 [activity]
 activity_pattern = "random"  # "random" or "block"

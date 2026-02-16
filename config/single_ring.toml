@@ -141,6 +141,9 @@ metric_npoints = 1000
 # Only used when mode = "logspaced"
 # npoints = 1000
 
+# Decimal places for MSD output (default: use metric_precision from [output])
+# precision = 4
+
 # Enable center-of-mass MSD computation
 # By default, only monomer MSD is computed
 # Set to true to also compute COM MSD
@@ -175,6 +178,9 @@ mode = "fixed"
 # Only used when mode = "logspaced"
 # npoints = 1000
 
+# Decimal places for Rg output (default: use metric_precision from [output])
+# precision = 4
+
 # =============================================================================
 # OUTPUT OPTIONS
 # =============================================================================
@@ -191,6 +197,10 @@ export_xyz = false
 #   "csv"  : Export metrics to separate CSV files (human-readable, easy to import)
 # When using csv, creates: {params}_active_msd.csv, {params}_active_rg.csv, etc.
 metrics_format = "csv"
+
+# Default decimal places for metric CSV output (MSD, Rg, etc.)
+# Can be overridden per-metric in [msd] and [rg] sections
+metric_precision = 4
 
 # =============================================================================
 # ACTIVITY PATTERN

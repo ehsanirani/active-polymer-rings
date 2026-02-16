@@ -5,7 +5,17 @@ using Printf
 using StaticArrays
 
 export load_simulation_data, load_msd_from_file, split_rings_coords, split_rings_tangents
-export save_rg_csv, save_msd_csv, save_rs_csv, save_beta_csv
+export save_rg_csv, save_msd_csv, save_rs_csv, save_beta_csv, format_with_precision
+
+"""
+    format_with_precision(x::Real, precision::Int)
+
+Format a number with the specified number of decimal places.
+"""
+function format_with_precision(x::Real, precision::Int)
+    fmt = Printf.Format("%.$(precision)f")
+    return Printf.format(fmt, x)
+end
 
 """
     load_simulation_data(filepath::String; phase::Symbol=:active)
@@ -136,13 +146,13 @@ end
 """
     save_rg_csv(run_name::String, ring_number::Int, dt::Float64, logger_steps::Int,
                 Rg::Vector{Float64}, Rg1::Vector{Float64}, Rg2::Vector{Float64}, Rg3::Vector{Float64};
-                output_dir::String="_data/csv")
+                output_dir::String="_data/csv", precision::Int=4)
 
 Save radius of gyration components to CSV files.
 """
 function save_rg_csv(run_name::String, ring_number::Int, dt::Float64, logger_steps::Int,
                      Rg::Vector{Float64}, Rg1::Vector{Float64}, Rg2::Vector{Float64}, Rg3::Vector{Float64};
-                     output_dir::String="_data/csv")
+                     output_dir::String="_data/csv", precision::Int=4)
 
     mkpath(output_dir)
 
@@ -154,8 +164,8 @@ function save_rg_csv(run_name::String, ring_number::Int, dt::Float64, logger_ste
         :Rg3 => joinpath(output_dir, "Rg3_ring$(ring_number).csv"),
     )
 
-    # Format function
-    format_values(arr) = [@sprintf("%.4f", x) for x in arr]
+    # Format function with configurable precision
+    format_values(arr) = [format_with_precision(x, precision) for x in arr]
 
     # Save each component
     for (key, data) in zip([:Rg, :Rg1, :Rg2, :Rg3], [Rg, Rg1, Rg2, Rg3])
@@ -175,17 +185,17 @@ end
 
 """
     save_msd_csv(run_name::String, ring_number::Int, dt::Float64, logger_steps::Int,
-                 msd_array::Vector{Float64}; output_dir::String="_data/csv")
+                 msd_array::Vector{Float64}; output_dir::String="_data/csv", precision::Int=4)
 
 Save MSD data to CSV file.
 """
 function save_msd_csv(run_name::String, ring_number::Int, dt::Float64, logger_steps::Int,
-                      msd_array::Vector{Float64}; output_dir::String="_data/csv")
+                      msd_array::Vector{Float64}; output_dir::String="_data/csv", precision::Int=4)
 
     mkpath(output_dir)
 
     filename = joinpath(output_dir, "MSD_ring$(ring_number).csv")
-    format_values(arr) = [@sprintf("%.4f", x) for x in arr]
+    format_values(arr) = [format_with_precision(x, precision) for x in arr]
 
     if isfile(filename)
         df = CSV.read(filename, DataFrame)
@@ -201,17 +211,17 @@ end
 
 """
     save_rs_csv(run_name::String, ring_number::Int, Rs_array::Vector{Float64};
-                output_dir::String="_data/csv")
+                output_dir::String="_data/csv", precision::Int=4)
 
 Save Rs (end-to-end distance) data to CSV file.
 """
 function save_rs_csv(run_name::String, ring_number::Int, Rs_array::Vector{Float64};
-                     output_dir::String="_data/csv")
+                     output_dir::String="_data/csv", precision::Int=4)
 
     mkpath(output_dir)
 
     filename = joinpath(output_dir, "Rs_ring$(ring_number).csv")
-    format_values(arr) = [@sprintf("%.4f", x) for x in arr]
+    format_values(arr) = [format_with_precision(x, precision) for x in arr]
 
     if isfile(filename)
         df = CSV.read(filename, DataFrame)
@@ -227,17 +237,17 @@ end
 
 """
     save_beta_csv(run_name::String, ring_number::Int, beta_array::Vector{Float64};
-                  output_dir::String="_data/csv")
+                  output_dir::String="_data/csv", precision::Int=4)
 
 Save beta (tangent correlation) data to CSV file.
 """
 function save_beta_csv(run_name::String, ring_number::Int, beta_array::Vector{Float64};
-                       output_dir::String="_data/csv")
+                       output_dir::String="_data/csv", precision::Int=4)
 
     mkpath(output_dir)
 
     filename = joinpath(output_dir, "beta_ring$(ring_number).csv")
-    format_values(arr) = [@sprintf("%.4f", x) for x in arr]
+    format_values(arr) = [format_with_precision(x, precision) for x in arr]
 
     if isfile(filename)
         df = CSV.read(filename, DataFrame)
