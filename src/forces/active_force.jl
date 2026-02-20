@@ -91,20 +91,16 @@ end
 
 function compute_forces_single_ring!(inter::ActiveTangentForce, sys)
     n = inter.n_monomers_1
-    
-    # Handle boundary cases for tangent vectors
-    inter.tang_vecs[1] = normalize(vector(sys.coords[1], sys.coords[2], sys.boundary))
-    inter.tang_vecs[n] = normalize(vector(sys.coords[n-1], sys.coords[n], sys.boundary))
-    
-    # Compute forces from cosine angle potential
-    is = collect(1:n-2)
-    js = collect(2:n-1)
-    ks = collect(3:n)
+
+    # Ring-periodic triplets: every monomer is a center
+    js = collect(1:n)
+    is = [mod(j - 2, n) + 1 for j in 1:n]   # previous: [n, 1, 2, ..., n-1]
+    ks = [mod(j, n) + 1 for j in 1:n]        # next:     [2, 3, 4, ..., 1]
 
     tv_forces = force_active_tangent.(sys.coords[is], sys.coords[js], sys.coords[ks],
                                      (inter.k,), (sys.boundary,))
-    
-    for idx in 1:n-2
+
+    for idx in 1:n
         inter.tang_vecs[js[idx]] = tv_forces[idx][1]
         inter.forces[is[idx]] += tv_forces[idx][2]
         inter.forces[js[idx]] += tv_forces[idx][3]
@@ -116,38 +112,27 @@ function compute_forces_double_ring!(inter::ActiveTangentForce, sys)
     n1 = inter.n_monomers_1
     n2 = inter.n_monomers_2
 
-    # First ring
-    compute_ring_forces!(inter, sys, 1:n1, 1)
+    # First ring: monomers 1..n1, offset=0
+    compute_ring_forces!(inter, sys, 0, n1)
 
-    # Second ring
-    offset = n1
-    compute_ring_forces!(inter, sys, (1:n2) .+ offset, offset)
+    # Second ring: monomers (n1+1)..(n1+n2), offset=n1
+    compute_ring_forces!(inter, sys, n1, n2)
 end
 
-function compute_ring_forces!(inter::ActiveTangentForce, sys, indices, offset::Int)
-    n = length(indices)
-    
+function compute_ring_forces!(inter::ActiveTangentForce, sys, offset::Int, n::Int)
     if n < 3
         return
     end
-    
-    # Boundary tangent vectors
-    inter.tang_vecs[offset+1] = normalize(vector(sys.coords[offset+1], sys.coords[offset+2], sys.boundary))
-    inter.tang_vecs[offset+n] = normalize(vector(sys.coords[offset+n-1], sys.coords[offset+n], sys.boundary))
-    
-    is = collect(1:n-2)
-    js = collect(2:n-1)
-    ks = collect(3:n)
-    
-    # Adjust indices for this ring
-    is .+= offset
-    js .+= offset
-    ks .+= offset
+
+    # Ring-periodic triplets: every monomer is a center
+    js = [offset + j for j in 1:n]
+    is = [offset + mod(j - 2, n) + 1 for j in 1:n]   # previous
+    ks = [offset + mod(j, n) + 1 for j in 1:n]        # next
 
     tv_forces = force_active_tangent.(sys.coords[is], sys.coords[js], sys.coords[ks],
                                      (inter.k,), (sys.boundary,))
-    
-    for idx in 1:n-2
+
+    for idx in 1:n
         inter.tang_vecs[js[idx]] = tv_forces[idx][1]
         inter.forces[is[idx]] += tv_forces[idx][2]
         inter.forces[js[idx]] += tv_forces[idx][3]

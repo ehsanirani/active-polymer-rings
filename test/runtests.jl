@@ -1,8 +1,10 @@
 using Test
 using ActiveRings
 using JLD2
-using Molly: CubicBoundary
+using Molly
+using Molly: CubicBoundary, AtomsCalculators
 using StaticArrays: SVector
+using LinearAlgebra: norm, normalize
 
 @testset "Parameters" begin
     @testset "Single Ring Parameters" begin
@@ -292,6 +294,192 @@ end
         rm(test_file)
 
         println("Native XYZ basic test passed ✓")
+    end
+end
+
+@testset "Ring Closure - Active Force" begin
+    # Helper: build a minimal Molly System with given coords and all-active atoms
+    function make_ring_system(coords::Vector{SVector{3,Float64}}, boundary, f_active; k=0.0)
+        n = length(coords)
+        atoms = [Particle(i, 1.0, 1.0, 1.0, true,
+                 SVector(0.,0.,0.), SVector(0.,0.,0.), SVector(0,0,0)) for i in 1:n]
+        velocities = [SVector(0.,0.,0.) for _ in 1:n]
+
+        # Ring bonds: 1-2, 2-3, ..., n-1
+        bond_is = push!(collect(1:n-1), n)
+        bond_js = push!(collect(2:n), 1)
+        bonds = Molly.InteractionList2Atoms(
+            bond_is, bond_js,
+            [Molly.HarmonicBond(r0=1.0, k=30.0) for _ in 1:n]
+        )
+
+        inter = ActiveTangentForce(system_type=:single, n_monomers_1=n, k=k, f_active=f_active)
+
+        nf = CellListMapNeighborFinder(
+            eligible=trues(n, n), n_steps=1,
+            dist_cutoff=2.0, x0=coords
+        )
+
+        sys = Molly.System(
+            atoms=atoms,
+            coords=coords,
+            velocities=velocities,
+            boundary=boundary,
+            pairwise_inters=(Molly.LennardJones(cutoff=ShiftedPotentialCutoff(2.0^(1/6)), use_neighbors=true),),
+            specific_inter_lists=(bonds,),
+            general_inters=(inter,),
+            neighbor_finder=nf,
+            loggers=Dict{String,Any}(),
+            force_units=Molly.NoUnits,
+            energy_units=Molly.NoUnits
+        )
+        return sys, inter
+    end
+
+    @testset "Regular polygon: net active force is zero" begin
+        # On a perfect regular polygon every tangent is symmetric,
+        # so the vector sum of all normalized tangents must vanish.
+        for n in [6, 10, 20, 50]
+            L = 200.0
+            boundary = CubicBoundary(L)
+            R = 5.0
+            coords = [SVector(L/2 + R*cos(2π*i/n), L/2 + R*sin(2π*i/n), L/2) for i in 1:n]
+
+            sys, inter = make_ring_system(coords, boundary, 3.0)
+
+            # Compute forces via the ActiveTangentForce pathway
+            fs = [SVector(0.,0.,0.) for _ in 1:n]
+            AtomsCalculators.forces!(fs, sys, inter)
+
+            # The only contribution in fs is the active tangent force (k=0 ⇒ no bending)
+            net = sum(fs)
+            @test norm(net) < 1e-10
+        end
+    end
+
+    @testset "Tangent at monomer 1 and n are two-sided" begin
+        # For a non-regular ring, check that monomers 1 and n get tangents
+        # consistent with the ring closure (i.e. same formula as interior monomers).
+        n = 8
+        L = 200.0
+        boundary = CubicBoundary(L)
+
+        # Slightly perturbed circle so it's not a perfect polygon
+        R = 5.0
+        coords = [SVector(L/2 + R*cos(2π*i/n) + 0.1*i, L/2 + R*sin(2π*i/n), L/2) for i in 1:n]
+
+        sys, inter = make_ring_system(coords, boundary, 1.0)
+        fs = [SVector(0.,0.,0.) for _ in 1:n]
+        AtomsCalculators.forces!(fs, sys, inter)
+
+        # Manually compute expected tangent at monomer 1 using ring closure: triplet (n, 1, 2)
+        ba = Molly.vector(coords[1], coords[n], boundary)
+        bc = Molly.vector(coords[1], coords[2], boundary)
+        expected_tang_1 = normalize(bc / norm(bc) - ba / norm(ba))
+        @test isapprox(inter.tang_vecs[1], expected_tang_1; atol=1e-12)
+
+        # Manually compute expected tangent at monomer n using ring closure: triplet (n-1, n, 1)
+        ba_n = Molly.vector(coords[n], coords[n-1], boundary)
+        bc_n = Molly.vector(coords[n], coords[1], boundary)
+        expected_tang_n = normalize(bc_n / norm(bc_n) - ba_n / norm(ba_n))
+        @test isapprox(inter.tang_vecs[n], expected_tang_n; atol=1e-12)
+    end
+
+    @testset "All monomers get tangents (no zero vectors)" begin
+        n = 15
+        L = 200.0
+        boundary = CubicBoundary(L)
+        R = 5.0
+        coords = [SVector(L/2 + R*cos(2π*i/n), L/2 + R*sin(2π*i/n), L/2) for i in 1:n]
+
+        sys, inter = make_ring_system(coords, boundary, 1.0)
+        fs = [SVector(0.,0.,0.) for _ in 1:n]
+        AtomsCalculators.forces!(fs, sys, inter)
+
+        for i in 1:n
+            @test norm(inter.tang_vecs[i]) > 0.99  # should be unit vectors
+        end
+    end
+
+    @testset "Bending forces conserve momentum (k > 0)" begin
+        # The angle potential forces satisfy fb = -fa - fc per triplet,
+        # so the total bending force on the ring must be zero.
+        n = 12
+        L = 200.0
+        boundary = CubicBoundary(L)
+        R = 5.0
+        # Perturbed ring
+        coords = [SVector(L/2 + R*cos(2π*i/n) + 0.2*sin(3i), L/2 + R*sin(2π*i/n), L/2) for i in 1:n]
+
+        # f_active=0 so forces are purely from bending
+        sys, inter = make_ring_system(coords, boundary, 0.0; k=5.0)
+        fs = [SVector(0.,0.,0.) for _ in 1:n]
+        AtomsCalculators.forces!(fs, sys, inter)
+
+        net = sum(fs)
+        @test norm(net) < 1e-10
+    end
+
+    @testset "Double ring closure" begin
+        n1, n2 = 10, 8
+        L = 200.0
+        boundary = CubicBoundary(L)
+        R = 5.0
+
+        # Two separate rings placed apart
+        coords_1 = [SVector(L/2 + R*cos(2π*i/n1), L/2 + R*sin(2π*i/n1), L/2) for i in 1:n1]
+        coords_2 = [SVector(L/2 + R*cos(2π*i/n2) + 20.0, L/2 + R*sin(2π*i/n2), L/2) for i in 1:n2]
+        coords = vcat(coords_1, coords_2)
+        n = n1 + n2
+
+        atoms = [Particle(i, 1.0, 1.0, 1.0, true,
+                 SVector(0.,0.,0.), SVector(0.,0.,0.), SVector(0,0,0)) for i in 1:n]
+        velocities = [SVector(0.,0.,0.) for _ in 1:n]
+
+        # Bonds for two separate rings
+        bond_is_1 = push!(collect(1:n1-1), n1)
+        bond_js_1 = push!(collect(2:n1), 1)
+        bond_is_2 = push!(collect(n1+1:n-1), n)
+        bond_js_2 = push!(collect(n1+2:n), n1+1)
+        bonds = Molly.InteractionList2Atoms(
+            vcat(bond_is_1, bond_is_2),
+            vcat(bond_js_1, bond_js_2),
+            [Molly.HarmonicBond(r0=1.0, k=30.0) for _ in 1:n]
+        )
+
+        inter = ActiveTangentForce(system_type=:double, n_monomers_1=n1, n_monomers_2=n2,
+                                   k=0.0, f_active=2.0)
+
+        nf = CellListMapNeighborFinder(
+            eligible=trues(n, n), n_steps=1,
+            dist_cutoff=2.0, x0=coords
+        )
+
+        sys = Molly.System(
+            atoms=atoms, coords=coords, velocities=velocities,
+            boundary=boundary,
+            pairwise_inters=(Molly.LennardJones(cutoff=ShiftedPotentialCutoff(2.0^(1/6)), use_neighbors=true),),
+            specific_inter_lists=(bonds,),
+            general_inters=(inter,),
+            neighbor_finder=nf,
+            loggers=Dict{String,Any}(),
+            force_units=Molly.NoUnits,
+            energy_units=Molly.NoUnits
+        )
+
+        fs = [SVector(0.,0.,0.) for _ in 1:n]
+        AtomsCalculators.forces!(fs, sys, inter)
+
+        # Net active force on each regular-polygon ring should be zero independently
+        net_1 = sum(fs[1:n1])
+        net_2 = sum(fs[n1+1:end])
+        @test norm(net_1) < 1e-10
+        @test norm(net_2) < 1e-10
+
+        # All tangents should be unit vectors
+        for i in 1:n
+            @test norm(inter.tang_vecs[i]) > 0.99
+        end
     end
 end
 
